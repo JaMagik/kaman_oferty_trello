@@ -1,120 +1,182 @@
-import { PDFDocument, rgb, degrees } from 'pdf-lib';
-import fontkit from '@pdf-lib/fontkit';
-import { getTableForDeviceType } from '../data/tables';
+// ścieżka: src/utils/pdfGenerator.jsx
 
-export async function generateMitsubishiZubadanCylinderOfferPDF(
+import { PDFDocument, rgb } from 'pdf-lib';
+import fontkit from '@pdf-lib/fontkit';
+// Poprawiony import, aby pasował do Twojej struktury (zakładając, że index.js jest w src/data/tables/)
+import { getTableData } from '../data/tables'; 
+import { getTemplatePathsForDevice } from '../data/tables/pdfTemplateSets'; 
+
+// Funkcja drawTable (bez zmian z Twojego ostatniego działającego kodu)
+function drawTable(page, font, tableData) {
+  const startY = 750;
+  let currentY = startY;
+  const table = {
+    x: 50, y: startY, columnWidths: [40, 350, 70, 70], headerHeight: 27, rowHeight: 22,
+    lineHeight: 14, padding: { top: 8, bottom: 8, left: 7, right: 7 },
+  };
+  const columnPositions = [table.x];
+  for (let i = 0; i < table.columnWidths.length - 1; i++) {
+    columnPositions.push(columnPositions[i] + table.columnWidths[i]);
+  }
+  const wrapText = (text, font, size, maxWidth) => {
+    if (typeof text !== 'string') { text = String(text); }
+    const words = text.split(' ');
+    let lines = [];
+    let currentLine = words[0] || '';
+    for (let i = 1; i < words.length; i++) {
+      const word = words[i];
+      const width = font.widthOfTextAtSize(`${currentLine} ${word}`, size);
+      if (width < maxWidth) {
+        currentLine += ` ${word}`;
+      } else {
+        lines.push(currentLine);
+        currentLine = word;
+      }
+    }
+    lines.push(currentLine);
+    return lines;
+  };
+  currentY -= table.headerHeight;
+  const headerTextY = currentY + table.padding.top;
+  page.drawRectangle({
+    x: table.x, y: currentY, width: table.columnWidths.reduce((a, b) => a + b, 0),
+    height: table.headerHeight, color: rgb(0.6, 0, 0.15),
+  });
+  page.drawText('Nr', { x: columnPositions[0] + table.padding.left, y: headerTextY, size: 14, font, color: rgb(1, 1, 1) });
+  page.drawText('Nazwa towaru', { x: columnPositions[1] + table.padding.left, y: headerTextY, size: 14, font, color: rgb(1, 1, 1) });
+  page.drawText('Miara', { x: columnPositions[2] + table.padding.left, y: headerTextY, size: 14, font, color: rgb(1, 1, 1) });
+  page.drawText('Ilość', { x: columnPositions[3] + table.padding.left, y: headerTextY, size: 14, font, color: rgb(1, 1, 1) });
+  tableData.forEach((row, rowIndex) => {
+    if (!row || row.length < 4) { console.warn('Pominięto nieprawidłowy wiersz w tableData:', row); return; }
+    const textInCell = row[1] || '';
+    const textLines = wrapText(textInCell, font, 12, table.columnWidths[1] - table.padding.left - table.padding.right);
+    const requiredHeight = textLines.length * table.lineHeight + table.padding.top + table.padding.bottom;
+    const dynamicRowHeight = Math.max(table.rowHeight, requiredHeight);
+    currentY -= dynamicRowHeight;
+    if (rowIndex % 2 === 1) {
+      page.drawRectangle({
+        x: table.x, y: currentY, width: table.columnWidths.reduce((a, b) => a + b, 0),
+        height: dynamicRowHeight, color: rgb(0.98, 0.96, 0.96),
+      });
+    }
+    const textY = currentY + dynamicRowHeight - table.padding.top - table.lineHeight + 2;
+    page.drawText(String(row[0] || ''), { x: columnPositions[0] + table.padding.left, y: textY, size: 12, font, color: rgb(0.15, 0.15, 0.15) });
+    page.drawText(textLines.join('\n'), { x: columnPositions[1] + table.padding.left, y: textY, size: 12, font, color: rgb(0.15, 0.15, 0.15), lineHeight: table.lineHeight });
+    page.drawText(String(row[2] || ''), { x: columnPositions[2] + table.padding.left, y: textY, size: 12, font, color: rgb(0.15, 0.15, 0.15) });
+    const quantityText = String(row[3] || '');
+    const quantityWidth = font.widthOfTextAtSize(quantityText, 12);
+    const quantityX = columnPositions[3] + (table.columnWidths[3] - quantityWidth) / 2;
+    page.drawText(quantityText, { x: quantityX, y: textY, size: 12, font, color: rgb(0.15, 0.15, 0.15) });
+    page.drawLine({
+      start: { x: table.x, y: currentY }, end: { x: table.x + table.columnWidths.reduce((a, b) => a + b, 0), y: currentY },
+      thickness: 0.7, color: rgb(0.8, 0.8, 0.8),
+    });
+  });
+  return currentY;
+}
+
+// === POPRAWIONA NAZWA EKSPORTOWANEJ FUNKCJI ===
+export async function generateOfferPDF( 
   cena,
   userName,
   deviceType,
   model,
-  tank,
-  buffer
+  tankCapacity,
+  bufferCapacity
 ) {
   if (!userName?.trim() || !String(cena).trim()) {
     alert('Uzupełnij wszystkie wymagane pola: Imię i nazwisko oraz cena!');
     return;
   }
 
-  // Przygotuj dane tabeli
-  const tableRows = getTableForDeviceType(deviceType);
+  const selectedTemplatePaths = getTemplatePathsForDevice(deviceType);
 
-  // Wczytaj czcionkę firmową (Open Sans)
-  const fontBytes = await fetch('/fonts/OpenSans-Regular.ttf').then(res => res.arrayBuffer());
+  try {
+    const assetBuffers = await Promise.all([
+      ...selectedTemplatePaths.map(path => fetch(path).then(res => {
+          if (!res.ok) throw new Error(`Nie udało się wczytać pliku szablonu: ${path}`);
+          return res.arrayBuffer();
+      })),
+      fetch('/fonts/OpenSans-Regular.ttf').then(res => { 
+          if (!res.ok) throw new Error(`Nie udało się wczytać czcionki OpenSans-Regular.ttf z public/fonts/`);
+          return res.arrayBuffer();
+      })
+    ]);
 
-  // Stwórz dokument
-  const pdfDoc = await PDFDocument.create();
-  pdfDoc.registerFontkit(fontkit);
+    const fontBytes = assetBuffers.pop();
+    const templatePdfBuffers = assetBuffers; 
 
-  const font = await pdfDoc.embedFont(fontBytes);
-  const fontBold = font; // Dla uproszczenia, podmień jeśli masz wersję bold
-
-  // Strona 1: Oferta
-  const page = pdfDoc.addPage([595, 842]); // A4
-
-  // Gradient tła (delikatny)
-  page.drawRectangle({
-    x: 0, y: 0, width: 595, height: 842,
-    color: rgb(1, 1, 1), // biały, możesz zmienić na lekki szary
-  });
-
-  // Logo (opcjonalnie)
-  // const logoBytes = await fetch('/images/logo.png').then(res => res.arrayBuffer());
-  // const logoImg = await pdfDoc.embedPng(logoBytes);
-  // page.drawImage(logoImg, { x: 50, y: 770, width: 80, height: 38 });
-
-  // Nagłówek – duży, czerwony
-  page.drawText(`OFERTA DLA: ${userName.toUpperCase()}`, {
-    x: 50,
-    y: 790,
-    size: 30,
-    font: fontBold,
-    color: rgb(0.7, 0, 0.16),
-  });
-
-  // Ustawienia tabeli
-  const colX = [50, 110, 450, 520, 555];
-  const colW = [55, 335, 70, 30];
-  const yStart = 750;
-
-  // Nagłówek tabeli
-  page.drawRectangle({
-    x: colX[0], y: yStart, width: colW.reduce((a, b) => a + b, 0), height: 27,
-    color: rgb(0.6, 0, 0.15),
-    borderColor: rgb(0.6, 0, 0.15),
-    borderWidth: 1,
-  });
-  page.drawText('Nr',        { x: colX[0] + 7, y: yStart + 8, size: 14, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText('Nazwa towaru', { x: colX[1] + 7, y: yStart + 8, size: 14, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText('Miara',     { x: colX[2] + 7, y: yStart + 8, size: 14, font: fontBold, color: rgb(1, 1, 1) });
-  page.drawText('Ilość',     { x: colX[3] + 7, y: yStart + 8, size: 14, font: fontBold, color: rgb(1, 1, 1) });
-
-  // Pozycje tabeli
-  let y = yStart - 26;
-  for (let i = 0; i < tableRows.length; i++) {
-    // Alternatywny kolor wiersza
-    if (i % 2 === 1) {
-      page.drawRectangle({
-        x: colX[0], y: y, width: colW.reduce((a, b) => a + b, 0), height: 22,
-        color: rgb(0.98, 0.96, 0.96),
-      });
+    const finalPdfDoc = await PDFDocument.create();
+    finalPdfDoc.registerFontkit(fontkit);
+    const customFont = await finalPdfDoc.embedFont(fontBytes);
+    
+    // 1. Dodaj okładkę
+    if (templatePdfBuffers[0]) {
+      const okladkaDoc = await PDFDocument.load(templatePdfBuffers[0]);
+      if (okladkaDoc.getPageCount() > 0) {
+        const copiedPages = await finalPdfDoc.copyPages(okladkaDoc, okladkaDoc.getPageIndices());
+        copiedPages.forEach(page => finalPdfDoc.addPage(page));
+      } else {
+        console.warn(`Plik okładki ${selectedTemplatePaths[0]} jest pusty.`);
+        const errorPage = finalPdfDoc.addPage(); // Dodaj stronę, nawet jeśli pusta, aby uniknąć błędów
+        errorPage.drawText('Brak szablonu okładki.', {x:50, y: 750, font: customFont, size: 18});
+      }
+    } else {
+        console.warn('Nie zdefiniowano ścieżki do okładki dla wybranego typu urządzenia.');
+        const errorPage = finalPdfDoc.addPage();
+        errorPage.drawText('Brak szablonu okładki dla tego typu urządzenia.', {x:50, y: 750, font: customFont, size: 18});
     }
-    // Linie oddzielające
-    page.drawLine({
-      start: { x: colX[0], y: y },
-      end:   { x: colX[0] + colW.reduce((a, b) => a + b, 0), y: y },
-      thickness: 0.7,
-      color: rgb(0.8, 0.8, 0.8),
+
+    // 2. Stwórz nową, dynamiczną stronę z tabelą i ceną
+    const dynamicPage = finalPdfDoc.addPage(); 
+    const tableData = getTableData(deviceType, model, tankCapacity, bufferCapacity);
+    
+    dynamicPage.drawText(`OFERTA DLA: ${userName.toUpperCase()}`, {
+        x: 50, y: 800, size: 24, font: customFont, color: rgb(0.7, 0, 0.16),
     });
-    // Komórki
-    page.drawText(tableRows[i][0], { x: colX[0] + 7, y: y + 6, size: 12, font, color: rgb(0.15,0.15,0.15) });
-    page.drawText(tableRows[i][1], { x: colX[1] + 7, y: y + 6, size: 12, font, color: rgb(0.15,0.15,0.15), maxWidth: colW[1] - 10 });
-    page.drawText(tableRows[i][2], { x: colX[2] + 7, y: y + 6, size: 12, font, color: rgb(0.15,0.15,0.15) });
-    page.drawText(tableRows[i][3], { x: colX[3] + 15, y: y + 6, size: 12, font, color: rgb(0.15,0.15,0.15) });
-    y -= 22;
+
+    let lastYPosAfterTable = 800 - 30; 
+    if (tableData && tableData.length > 0) {
+      lastYPosAfterTable = drawTable(dynamicPage, customFont, tableData); 
+    } else {
+      dynamicPage.drawText("Brak danych do wyświetlenia w tabeli dla wybranej konfiguracji.", {
+        x: 50, y: 750, size: 12, font: customFont, color: rgb(0.5, 0.5, 0.5)
+      });
+      lastYPosAfterTable = 730;
+    }
+    
+    dynamicPage.drawText(`CENA KOŃCOWA: ${cena} PLN brutto`, {
+        x: 50, y: lastYPosAfterTable - 40, size: 18, font: customFont, color: rgb(0.7, 0, 0.16),
+    });
+
+    // 3. Dodaj resztę statycznych stron (katalog, opcje, kontakt)
+    for (let i = 1; i < templatePdfBuffers.length; i++) { 
+        if (templatePdfBuffers[i]) {
+            const templateDoc = await PDFDocument.load(templatePdfBuffers[i]);
+            if (templateDoc.getPageCount() > 0) {
+                const copiedPages = await finalPdfDoc.copyPages(templateDoc, templateDoc.getPageIndices());
+                copiedPages.forEach(page => finalPdfDoc.addPage(page));
+            } else {
+                console.warn(`Plik PDF ${selectedTemplatePaths[i]} (${templatePdfBuffers[i]}) jest pusty i został pominięty.`);
+            }
+        } else {
+             console.warn(`Nie zdefiniowano ścieżki dla szablonu o indeksie ${i} dla wybranego typu urządzenia.`);
+        }
+    }
+    
+    const pdfBytes = await finalPdfDoc.save();
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+  } catch (error) {
+    console.error('Błąd podczas generowania PDF:', error);
+    alert(`Wystąpił błąd podczas generowania oferty: ${error.message}. Sprawdź konsolę deweloperską (F12).`);
   }
-
-  // Podsumowanie: Cena
-  page.drawText('CENA KOŃCOWA:', {
-    x: 50,
-    y: y - 30,
-    size: 22,
-    font: fontBold,
-    color: rgb(0.7, 0, 0.16),
-  });
-  page.drawText(`${cena} PLN`, {
-    x: 260,
-    y: y - 30,
-    size: 22,
-    font: fontBold,
-    color: rgb(0.8, 0.05, 0.1),
-  });
-
-  // Zapis i pobranie
-  const pdfBytes = await pdfDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `Oferta_${deviceType}.pdf`;
-  a.click();
 }
