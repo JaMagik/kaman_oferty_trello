@@ -2,11 +2,10 @@
 
 import { PDFDocument, rgb } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
-// Poprawiony import, aby pasował do Twojej struktury (zakładając, że index.js jest w src/data/tables/)
 import { getTableData } from '../data/tables'; 
 import { getTemplatePathsForDevice } from '../data/tables/pdfTemplateSets'; 
 
-// Funkcja drawTable (bez zmian z Twojego ostatniego działającego kodu)
+// Funkcja pomocnicza do rysowania tabeli (bez zmian)
 function drawTable(page, font, tableData) {
   const startY = 750;
   let currentY = startY;
@@ -75,7 +74,8 @@ function drawTable(page, font, tableData) {
   return currentY;
 }
 
-// === POPRAWIONA NAZWA EKSPORTOWANEJ FUNKCJI ===
+
+// Główna funkcja generująca PDF
 export async function generateOfferPDF( 
   cena,
   userName,
@@ -84,17 +84,24 @@ export async function generateOfferPDF(
   tankCapacity,
   bufferCapacity
 ) {
+  // Sprawdzenie podstawowych danych
   if (!userName?.trim() || !String(cena).trim()) {
     alert('Uzupełnij wszystkie wymagane pola: Imię i nazwisko oraz cena!');
     return;
   }
 
+  // --- KROK 1: DIAGNOSTYKA ---
+  // Te linie pokażą w konsoli przeglądarki (F12), jakie dane są używane do wyboru szablonów.
+  console.log(`[DIAGNOSTYKA] Próba znalezienia szablonów dla klucza: "${deviceType}"`);
   const selectedTemplatePaths = getTemplatePathsForDevice(deviceType);
-
+  console.log('[DIAGNOSTYKA] Wybrane ścieżki szablonów:', selectedTemplatePaths);
+  
   try {
+    // --- KROK 2: WCZYTANIE PLIKÓW ---
+    // Wczytanie wszystkich potrzebnych zasobów: szablonów PDF i czcionki.
     const assetBuffers = await Promise.all([
       ...selectedTemplatePaths.map(path => fetch(path).then(res => {
-          if (!res.ok) throw new Error(`Nie udało się wczytać pliku szablonu: ${path}`);
+          if (!res.ok) throw new Error(`Nie udało się wczytać pliku szablonu PDF: ${path}. Sprawdź, czy plik istnieje w folderze 'public' i czy ścieżka jest poprawna.`);
           return res.arrayBuffer();
       })),
       fetch('/fonts/OpenSans-Regular.ttf').then(res => { 
@@ -103,28 +110,20 @@ export async function generateOfferPDF(
       })
     ]);
 
+    // Przygotowanie czcionki i oddzielenie szablonów od czcionki
     const fontBytes = assetBuffers.pop();
     const templatePdfBuffers = assetBuffers; 
 
+    // --- KROK 3: TWORZENIE NOWEGO DOKUMENTU PDF ---
     const finalPdfDoc = await PDFDocument.create();
     finalPdfDoc.registerFontkit(fontkit);
     const customFont = await finalPdfDoc.embedFont(fontBytes);
     
-    // 1. Dodaj okładkę
+    // 1. Dodaj okładkę (pierwszy szablon z listy)
     if (templatePdfBuffers[0]) {
       const okladkaDoc = await PDFDocument.load(templatePdfBuffers[0]);
-      if (okladkaDoc.getPageCount() > 0) {
-        const copiedPages = await finalPdfDoc.copyPages(okladkaDoc, okladkaDoc.getPageIndices());
-        copiedPages.forEach(page => finalPdfDoc.addPage(page));
-      } else {
-        console.warn(`Plik okładki ${selectedTemplatePaths[0]} jest pusty.`);
-        const errorPage = finalPdfDoc.addPage(); // Dodaj stronę, nawet jeśli pusta, aby uniknąć błędów
-        errorPage.drawText('Brak szablonu okładki.', {x:50, y: 750, font: customFont, size: 18});
-      }
-    } else {
-        console.warn('Nie zdefiniowano ścieżki do okładki dla wybranego typu urządzenia.');
-        const errorPage = finalPdfDoc.addPage();
-        errorPage.drawText('Brak szablonu okładki dla tego typu urządzenia.', {x:50, y: 750, font: customFont, size: 18});
+      const copiedPages = await finalPdfDoc.copyPages(okladkaDoc, okladkaDoc.getPageIndices());
+      copiedPages.forEach(page => finalPdfDoc.addPage(page));
     }
 
     // 2. Stwórz nową, dynamiczną stronę z tabelą i ceną
@@ -135,14 +134,13 @@ export async function generateOfferPDF(
         x: 50, y: 800, size: 24, font: customFont, color: rgb(0.7, 0, 0.16),
     });
 
-    let lastYPosAfterTable = 800 - 30; 
+    let lastYPosAfterTable = 770; // Domyślna pozycja, jeśli nie ma tabeli
     if (tableData && tableData.length > 0) {
       lastYPosAfterTable = drawTable(dynamicPage, customFont, tableData); 
     } else {
       dynamicPage.drawText("Brak danych do wyświetlenia w tabeli dla wybranej konfiguracji.", {
         x: 50, y: 750, size: 12, font: customFont, color: rgb(0.5, 0.5, 0.5)
       });
-      lastYPosAfterTable = 730;
     }
     
     dynamicPage.drawText(`CENA KOŃCOWA: ${cena} PLN brutto`, {
@@ -153,17 +151,12 @@ export async function generateOfferPDF(
     for (let i = 1; i < templatePdfBuffers.length; i++) { 
         if (templatePdfBuffers[i]) {
             const templateDoc = await PDFDocument.load(templatePdfBuffers[i]);
-            if (templateDoc.getPageCount() > 0) {
-                const copiedPages = await finalPdfDoc.copyPages(templateDoc, templateDoc.getPageIndices());
-                copiedPages.forEach(page => finalPdfDoc.addPage(page));
-            } else {
-                console.warn(`Plik PDF ${selectedTemplatePaths[i]} (${templatePdfBuffers[i]}) jest pusty i został pominięty.`);
-            }
-        } else {
-             console.warn(`Nie zdefiniowano ścieżki dla szablonu o indeksie ${i} dla wybranego typu urządzenia.`);
+            const copiedPages = await finalPdfDoc.copyPages(templateDoc, templateDoc.getPageIndices());
+            copiedPages.forEach(page => finalPdfDoc.addPage(page));
         }
     }
     
+    // --- KROK 4: ZAPIS I POBRANIE PLIKU ---
     const pdfBytes = await finalPdfDoc.save();
     const blob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
@@ -171,7 +164,7 @@ export async function generateOfferPDF(
     a.href = url;
     a.download = `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`;
     document.body.appendChild(a);
-    a.click();
+a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
