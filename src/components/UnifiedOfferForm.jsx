@@ -114,6 +114,9 @@ export default function UnifiedOfferForm() {
   const handleTrelloAuth = () => {
     const returnUrl = window.location.href.split('#')[0]; // URL bez hasha
     const authUrl = `https://trello.com/1/authorize?expiration=1day&name=${encodeURIComponent(TRELLO_APP_NAME)}&scope=read,write&response_type=token&key=${TRELLO_API_KEY}&return_url=${encodeURIComponent(returnUrl)}`;
+
+    console.log("URL Aplikacji (return_url):", returnUrl);
+  console.log("Pełny URL Autoryzacyjny (authUrl) wysyłany do Trello:", authUrl);
     window.location.href = authUrl;
   };
 
