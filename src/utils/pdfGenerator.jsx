@@ -91,14 +91,12 @@ export async function generateOfferPDF(
   }
 
   // --- KROK 1: DIAGNOSTYKA ---
-  // Te linie pokażą w konsoli przeglądarki (F12), jakie dane są używane do wyboru szablonów.
   console.log(`[DIAGNOSTYKA] Próba znalezienia szablonów dla klucza: "${deviceType}"`);
   const selectedTemplatePaths = getTemplatePathsForDevice(deviceType);
   console.log('[DIAGNOSTYKA] Wybrane ścieżki szablonów:', selectedTemplatePaths);
   
   try {
     // --- KROK 2: WCZYTANIE PLIKÓW ---
-    // Wczytanie wszystkich potrzebnych zasobów: szablonów PDF i czcionki.
     const assetBuffers = await Promise.all([
       ...selectedTemplatePaths.map(path => fetch(path).then(res => {
           if (!res.ok) throw new Error(`Nie udało się wczytać pliku szablonu PDF: ${path}. Sprawdź, czy plik istnieje w folderze 'public' i czy ścieżka jest poprawna.`);
@@ -110,7 +108,6 @@ export async function generateOfferPDF(
       })
     ]);
 
-    // Przygotowanie czcionki i oddzielenie szablonów od czcionki
     const fontBytes = assetBuffers.pop();
     const templatePdfBuffers = assetBuffers; 
 
@@ -122,8 +119,8 @@ export async function generateOfferPDF(
     // 1. Dodaj okładkę (pierwszy szablon z listy)
     if (templatePdfBuffers[0]) {
       const okladkaDoc = await PDFDocument.load(templatePdfBuffers[0]);
-      const copiedPages = await finalPdfDoc.copyPages(okladkaDoc, okladkaDoc.getPageIndices());
-      copiedPages.forEach(page => finalPdfDoc.addPage(page));
+      const [copiedPage] = await finalPdfDoc.copyPages(okladkaDoc, [0]);
+      finalPdfDoc.addPage(copiedPage);
     }
 
     // 2. Stwórz nową, dynamiczną stronę z tabelą i ceną
@@ -151,8 +148,8 @@ export async function generateOfferPDF(
     for (let i = 1; i < templatePdfBuffers.length; i++) { 
         if (templatePdfBuffers[i]) {
             const templateDoc = await PDFDocument.load(templatePdfBuffers[i]);
-            const copiedPages = await finalPdfDoc.copyPages(templateDoc, templateDoc.getPageIndices());
-            copiedPages.forEach(page => finalPdfDoc.addPage(page));
+            const [copiedPage] = await finalPdfDoc.copyPages(templateDoc, [0]);
+            finalPdfDoc.addPage(copiedPage);
         }
     }
     
@@ -164,7 +161,7 @@ export async function generateOfferPDF(
     a.href = url;
     a.download = `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`;
     document.body.appendChild(a);
-a.click();
+    a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
