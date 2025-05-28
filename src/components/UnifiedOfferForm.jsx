@@ -37,6 +37,9 @@ export default function UnifiedOfferForm() {
     const cardIdFromUrl = urlParams.get('trelloCardId');
     if (cardIdFromUrl) {
       setTrelloCardId(cardIdFromUrl);
+
+       console.log("URL Aplikacji (return_url):", returnUrl);
+  console.log("Pełny URL Autoryzacyjny (authUrl) wysyłany do Trello:", authUrl);
       console.log("Odczytano trelloCardId z URL:", cardIdFromUrl);
     }
 
