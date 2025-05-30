@@ -32,22 +32,22 @@ export default function UnifiedOfferForm() {
     const cardIdFromUrl = params.get('trelloCardId');
     if (cardIdFromUrl) {
       setTrelloCardId(cardIdFromUrl);
-      console.log("Trello Card ID from URL:", cardIdFromUrl);
+      console.log("UNIFIED_FORM: Trello Card ID from URL:", cardIdFromUrl); // Dodany log
     } else {
-      console.warn("Nie znaleziono trelloCardId w URL.");
-      // Można by tu spróbować odczytać z t.arg(), jeśli TrelloPowerUp.iframe() jest dostępne globalnie
-      // const t = window.TrelloPowerUp?.iframe();
-      // if (t) {
-      //   const cardIdFromArg = t.arg('cardId');
-      //   if (cardIdFromArg) setTrelloCardId(cardIdFromArg);
-      // }
+      console.warn("UNIFIED_FORM: Nie znaleziono trelloCardId w URL.");
     }
   }, [deviceType, model]); //
 
   const handleGenerateAndSetPdf = async (e) => { //
     e.preventDefault(); //
+    console.log("UNIFIED_FORM: Rozpoczęto generowanie PDF..."); // Dodany log
     const pdfData = await generateOfferPDF(price, userName, deviceType, model, tank, buffer); //
-    setGeneratedPdfData(pdfData); //
+    if (pdfData) {
+        console.log("UNIFIED_FORM: PDF wygenerowany pomyślnie (jako Blob)."); // Dodany log
+        setGeneratedPdfData(pdfData); //
+    } else {
+        console.error("UNIFIED_FORM: Błąd podczas generowania PDF, pdfData jest null."); // Dodany log
+    }
   };
 
   const handleDownloadPdf = () => { //
@@ -61,30 +61,40 @@ export default function UnifiedOfferForm() {
   };
 
   const handleSaveToTrello = () => { //
+    console.log("UNIFIED_FORM: Kliknięto 'Zapisz w Trello'."); // Dodany log
     if (!generatedPdfData) { //
       alert("Najpierw wygeneruj PDF!"); //
       return; //
     }
     if (!trelloCardId) {
       alert("Brak ID karty Trello. Nie można zapisać.");
+      console.error("UNIFIED_FORM: trelloCardId jest nullem lub niezdefiniowane w handleSaveToTrello"); // Dodany log
       return;
     }
+    console.log("UNIFIED_FORM: PDF i cardId są dostępne. Rozpoczynanie konwersji do base64."); // Dodany log
 
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64PdfDataUrl = reader.result;
+      console.log('UNIFIED_FORM: Przygotowano dane do wysłania (base64):', { // Dodany log
+        type: 'TRELLO_SAVE_PDF',
+        pdfDataUrlLength: base64PdfDataUrl ? base64PdfDataUrl.length : 0,
+        pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
+        cardId: trelloCardId
+      });
+      console.log('UNIFIED_FORM: Wysyłanie postMessage do parent z targetOrigin:', KAMAN_APP_ORIGIN); // Dodany log
 
       window.parent.postMessage({
-        type: 'TRELLO_SAVE_PDF', // Dodajemy typ wiadomości
-        pdfDataUrl: base64PdfDataUrl, // Wysyłamy PDF jako base64 data URL
+        type: 'TRELLO_SAVE_PDF',
+        pdfDataUrl: base64PdfDataUrl,
         pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`, //
-        cardId: trelloCardId // Przekazujemy ID karty
+        cardId: trelloCardId
       }, KAMAN_APP_ORIGIN); // Używamy origin aplikacji jako target dla bezpieczeństwa
 
-      alert("Polecenie zapisu PDF wysłane do Power-Upa Trello!");
+      alert("Polecenie zapisu PDF wysłane do Power-Upa Trello!"); // Ten alert się pojawia
     };
     reader.onerror = (error) => {
-      console.error('Błąd konwersji PDF na base64:', error);
+      console.error('UNIFIED_FORM: Błąd konwersji PDF na base64:', error); // Zmieniony log
       alert('Błąd przygotowania PDF do wysłania.');
     };
     reader.readAsDataURL(generatedPdfData); // Konwertujemy Blob na Data URL
@@ -117,7 +127,8 @@ export default function UnifiedOfferForm() {
       <button type="submit">Generuj PDF</button>
 
       {generatedPdfData && <button type="button" onClick={handleDownloadPdf}>Pobierz PDF</button>}
-      {generatedPdfData && <button type="button" onClick={handleSaveToTrello}>Zapisz w Trello</button>}
+      {generatedPdfData && trelloCardId && <button type="button" onClick={handleSaveToTrello}>Zapisz w Trello</button>}
+      {!trelloCardId && generatedPdfData && <button type="button" disabled title="ID karty Trello nie zostało wczytane.">Zapisz w Trello (niedostępne)</button>}
     </form>
   );
 }
