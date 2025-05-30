@@ -64,8 +64,8 @@ export default function UnifiedOfferForm() {
 
   const handleTrelloAuth = () => {
     const returnUrl = window.location.href.split('#')[0];
-    const authUrl = `https://trello.com/1/authorize?expiration=1day&name=${encodeURIComponent(TRELLO_APP_NAME)}&scope=read,write,account,attach&response_type=token&key=${TRELLO_API_KEY}&return_url=${encodeURIComponent(returnUrl)}
-`;
+    const authUrl = `https://trello.com/1/authorize?expiration=1day&name=${encodeURIComponent(TRELLO_APP_NAME)}&scope=read,write,account,attach&response_type=token&key=${TRELLO_API_KEY}&return_url=${encodeURIComponent(returnUrl)}`;
+
     window.location.href = authUrl;
   };
 
