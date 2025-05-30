@@ -1,23 +1,23 @@
 // api/trelloAuth/start.js
-import crypto from 'crypto';
-import OAuth from 'oauth-1.0a';
-import fetch from 'node-fetch';
+import crypto from 'crypto'; //
+import OAuth from 'oauth-1.0a'; //
+import fetch from 'node-fetch'; //
 
 export default async function handler(req, res) {
-  const { TRELLO_PUBLIC_API_KEY, TRELLO_SECRET } = process.env;
-  // WAŻNE: Zastąp rzeczywistym adresem URL aplikacji Vercel
-  const callbackUrl = 'https://<TWOJA_RZECZYWISTA_NAZWA_APLIKACJI>.vercel.app/api/trelloAuth/callback'; //
-  const appName = 'KamanOfertyPowerUp'; // Lub nazwa Twojego Power-Upa
+  const { TRELLO_PUBLIC_API_KEY, TRELLO_SECRET, NEXT_PUBLIC_APP_URL } = process.env;
+  const KAMAN_APP_URL = NEXT_PUBLIC_APP_URL || 'https://kaman-oferty-trello.vercel.app'; // Użyj zmiennej środowiskowej
+  const callbackUrl = `${KAMAN_APP_URL}/api/trelloAuth/callback`; //
+  const appName = 'KamanOfertyPowerUp'; //
 
-  const oauth = OAuth({
+  const oauth = OAuth({ //
     consumer: { key: TRELLO_PUBLIC_API_KEY, secret: TRELLO_SECRET }, //
     signature_method: 'HMAC-SHA1', //
-    hash_function(base_string, key) {
+    hash_function(base_string, key) { //
       return crypto.createHmac('sha1', key).update(base_string).digest('base64'); //
     }
   });
 
-  const request_data = {
+  const request_data = { //
     url: 'https://trello.com/1/OAuthGetRequestToken', //
     method: 'POST', //
     data: { oauth_callback: callbackUrl } //
@@ -30,25 +30,23 @@ export default async function handler(req, res) {
     const text = await response.text(); //
 
     if (!response.ok) {
-      console.error('Trello OAuthGetRequestToken error:', text);
-      return res.status(response.status).send(`Error getting request token: ${text}`);
+      console.error('Trello OAuthGetRequestToken error:', text); //
+      return res.status(response.status).send(`Error getting request token: ${text}`); //
     }
 
     const params = new URLSearchParams(text); //
     const oauthToken = params.get('oauth_token'); //
 
     if (!oauthToken) {
-      console.error('oauth_token not found in response:', text);
-      return res.status(500).send('Failed to retrieve oauth_token.');
+      console.error('oauth_token not found in response:', text); //
+      return res.status(500).send('Failed to retrieve oauth_token.'); //
     }
-
-    // Przekieruj na stronę autoryzacyjną Trello
-    // t.authorize() oczekuje, że ten endpoint wykona to przekierowanie.
-    const trelloAuthUrl = `https://trello.com/1/OAuthAuthorizeToken?oauth_token=<span class="math-inline">\{oauthToken\}&name\=</span>{encodeURIComponent(appName)}&expiration=never&scope=read,write`; // Dostosuj scope według potrzeb
+    // Poprawiony URL autoryzacyjny, usunięto encje HTML
+    const trelloAuthUrl = `https://trello.com/1/OAuthAuthorizeToken?oauth_token=${oauthToken}&name=${encodeURIComponent(appName)}&expiration=never&scope=read,write`;
     res.redirect(trelloAuthUrl); //
 
   } catch (error) {
-    console.error('Error in /api/trelloAuth/start:', error);
-    res.status(500).send(`Server error: ${error.message}`);
+    console.error('Error in /api/trelloAuth/start:', error); //
+    res.status(500).send(`Server error: ${error.message}`); //
   }
 }

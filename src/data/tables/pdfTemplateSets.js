@@ -189,9 +189,9 @@ export const pdfTemplateSets = {
 
   // --- KOTŁY NA PELLET ---
   'LAZAR': [
-    '/pdf_templates/kotly-pellet/lazar/1_okladka.pdf',
-    '/pdf_templates/kotly-pellet/lazar/3_katalog.pdf',
-    '/pdf_templates/kotly-pellet/lazar/4_opcje.pdf',
+    '/pdf_templates/lazar/1_okladka.pdf',
+    '/pdf_templates/lazar/3_katalog.pdf',
+    '/pdf_templates/lazar/4_opcje.pdf',
     commonContactPage,
   ],
   'KAMEN-KOMPAKT-LUX': [
