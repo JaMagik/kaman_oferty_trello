@@ -143,12 +143,11 @@ export default function UnifiedOfferForm() {
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64PdfDataUrl = reader.result;
-      const dataToReturn = {
-        type: 'TRELLO_SAVE_PDF',
-        pdfDataUrl: base64PdfDataUrl,
-        pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_') || 'klient'}.pdf`,
-        cardId: trelloCardId
-      };
+     const dataToReturn = {
+  type: 'MINIMAL_TEST_SUCCESS',
+  message: 'Test z popupu!',
+  testCardId: trelloCardId
+};
 
       console.log('UNIFIED_FORM: Przygotowano dane do zwrócenia przez t.closePopup():', {
           type: dataToReturn.type,
