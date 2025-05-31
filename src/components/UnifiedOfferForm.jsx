@@ -41,7 +41,6 @@ export default function UnifiedOfferForm() {
             console.log("UNIFIED_FORM: Trello Card ID from URL (fallback):", cardIdFromUrl);
           } else {
             console.warn("UNIFIED_FORM: Nie znaleziono trelloCardId ani w t.arg(), ani w URL.");
-            // Rozważ poinformowanie użytkownika lub zablokowanie przycisku zapisu
           }
         }
       } catch (e) {
@@ -63,7 +62,7 @@ export default function UnifiedOfferForm() {
   const handleGenerateAndSetPdf = async (e) => {
     e.preventDefault();
     console.log("UNIFIED_FORM: Rozpoczęto generowanie PDF...");
-    setIsSaving(true); // Można użyć tego samego stanu do blokowania przycisków podczas generowania
+    setIsSaving(true);
     try {
       const pdfBlob = await generateOfferPDF(price, userName, deviceType, model, tank, buffer);
       if (pdfBlob instanceof Blob) {
@@ -117,9 +116,10 @@ export default function UnifiedOfferForm() {
 
   const handleSaveToTrello = () => {
     console.log("UNIFIED_FORM: Kliknięto 'Zapisz w Trello'.");
-    if (!generatedPdfData) {
-      alert("Najpierw wygeneruj PDF!");
-      return;
+    if (!generatedPdfData && true) { // Zmieniono warunek, aby zezwolić na test bez PDF
+      // alert("Najpierw wygeneruj PDF!"); // Zakomentowane na potrzeby testu
+      console.warn("UNIFIED_FORM: Test minimalny - pomijanie sprawdzania generatedPdfData.");
+      // return; // Zakomentowane na potrzeby testu
     }
     if (!trelloCardId) {
       alert("Brak ID karty Trello. Nie można zapisać.");
@@ -131,40 +131,74 @@ export default function UnifiedOfferForm() {
       console.error("UNIFIED_FORM: trelloContext (t) jest niedostępny. Próba zapisu niemożliwa.");
       return;
     }
-     if (!(generatedPdfData instanceof Blob)) {
+    
+    // Sprawdzenie dla pełnego PDF, jeśli nie testujemy minimalnie
+    if (false && !(generatedPdfData instanceof Blob)) { // Zmieniono warunek na false, aby pominąć dla testu minimalnego
         console.error("UNIFIED_FORM - handleSaveToTrello: generatedPdfData nie jest obiektem Blob!", generatedPdfData);
         alert("Błąd: Wygenerowane dane PDF nie są prawidłowym plikiem do zapisu.");
         return;
     }
 
-    console.log("UNIFIED_FORM: PDF, cardId i trelloContext są dostępne. Rozpoczynanie konwersji do base64.");
+    console.log("UNIFIED_FORM: Dane (lub ich brak w teście) i cardId są dostępne. Rozpoczynanie przygotowania danych do wysłania.");
     setIsSaving(true);
+
+    // ---- POCZĄTEK BLOKU TESTU MINIMALNEGO (jeśli chcesz testować bez PDF) ----
+    // Jeśli chcesz testować przepływ bez generowania/konwertowania PDF:
+    if (true) { // Ustaw na true, aby aktywować ten blok testowy
+        const minimalTestData = {
+            type: 'MINIMAL_TEST_SUCCESS',
+            message: 'Test z popupu! (bez konwersji PDF)',
+            cardId: trelloCardId,
+            pdfName: `Test_Oferta_${userName.replace(/ /g, '_') || 'klient'}_${new Date().getTime()}.pdf`,
+            timestamp: new Date().toISOString()
+        };
+        console.log('UNIFIED_FORM: Przygotowano dane do zwrócenia przez t.closePopup() (POPRAWIONY MINIMALNY TEST - BEZ PDF):', minimalTestData);
+        try {
+            trelloContext.closePopup(minimalTestData);
+        } catch (error) {
+            console.error("UNIFIED_FORM: Błąd podczas wywoływania trelloContext.closePopup() z danymi testowymi:", error);
+            alert("Wystąpił błąd podczas próby zamknięcia okna (test).");
+            setIsSaving(false);
+        }
+        return; // Zakończ tutaj, jeśli testujesz ten blok
+    }
+    // ---- KONIEC BLOKU TESTU MINIMALNEGO ----
+
+
+    // Poniższy kod (FileReader) zostanie wykonany tylko, jeśli powyższy blok testowy jest wyłączony (warunek if(false))
+    // i jeśli przywrócisz sprawdzanie generatedPdfData
+    if (!generatedPdfData) {
+        alert("Błąd krytyczny: Brak generatedPdfData przed próbą konwersji. To nie powinno się zdarzyć, jeśli nie testujesz minimalnie.");
+        setIsSaving(false);
+        return;
+    }
 
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64PdfDataUrl = reader.result;
-     const dataToReturn = {
-  type: 'MINIMAL_TEST_SUCCESS',
-  message: 'Test z popupu!',
-  testCardId: trelloCardId
-};
+      
+      // ORYGINALNE DANE (z pełnym PDF) - użyj tego, gdy test minimalny przejdzie pomyślnie
+      const dataToReturn = {
+        type: 'TRELLO_SAVE_PDF', // Zmień z powrotem na TRELLO_SAVE_PDF gdy testujesz pełny przepływ
+        pdfDataUrl: base64PdfDataUrl,
+        pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_') || 'klient'}.pdf`,
+        cardId: trelloCardId
+      };
 
       console.log('UNIFIED_FORM: Przygotowano dane do zwrócenia przez t.closePopup():', {
           type: dataToReturn.type,
           pdfName: dataToReturn.pdfName,
           cardId: dataToReturn.cardId,
-          pdfDataUrlLength: base64PdfDataUrl ? base64PdfDataUrl.length : 0
+          pdfDataUrlLength: base64PdfDataUrl ? base64PdfDataUrl.length : 0 
       });
       
       console.log('UNIFIED_FORM: Wywoływanie trelloContext.closePopup().');
       try {
         trelloContext.closePopup(dataToReturn);
-        // Popup powinien zostać zamknięty przez Trello. Stan 'isSaving' nie musi być tutaj resetowany,
-        // ponieważ komponent zostanie odmontowany. Główny skrypt (main.js) obsłuży resztę.
       } catch (error) {
         console.error("UNIFIED_FORM: Błąd podczas wywoływania trelloContext.closePopup():", error);
         alert("Wystąpił błąd podczas próby zamknięcia okna i wysłania danych do Trello.");
-        setIsSaving(false); // Zresetuj stan w przypadku błędu tutaj
+        setIsSaving(false);
       }
     };
     reader.onerror = (error) => {
@@ -203,13 +237,14 @@ export default function UnifiedOfferForm() {
 
       {generatedPdfData instanceof Blob && <button type="button" onClick={handleDownloadPdf} disabled={isSaving}>Pobierz PDF</button>}
       
-      {generatedPdfData instanceof Blob && trelloCardId && trelloContext && 
+      { /* Warunek dla przycisku Zapisz w Trello - teraz pozwala na test bez PDF */ }
+      { (generatedPdfData instanceof Blob || true) && trelloCardId && trelloContext && 
         <button type="button" onClick={handleSaveToTrello} disabled={isSaving}>
           {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
         </button>
       }
-      {/* Uproszczony warunek dla nieaktywnego przycisku */}
-      {(!(generatedPdfData instanceof Blob) || !trelloCardId || !trelloContext) && 
+      { /* Uproszczony warunek dla nieaktywnego przycisku */ }
+      { (!(generatedPdfData instanceof Blob && false) && (!trelloCardId || !trelloContext)) && 
         <button type="button" disabled title={!trelloContext ? "Błąd inicjalizacji Trello" : (!trelloCardId ? "ID karty Trello nie jest dostępne" : "Najpierw wygeneruj PDF")}>
           Zapisz w Trello (niedostępne)
         </button>
