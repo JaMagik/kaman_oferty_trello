@@ -4,9 +4,6 @@ import { generateOfferPDF } from "../utils/pdfGenerator";
 import { mitsubishiBaseTables } from "../data/tables/mitsubishiTables";
 import { atlanticBaseTables } from "../data/tables/atlanticTables";
 
-// KAMAN_APP_ORIGIN nie jest już potrzebny do postMessage stąd
-// const KAMAN_APP_ORIGIN = 'https://kaman-oferty-trello.vercel.app';
-
 const allDevicesData = { ...mitsubishiBaseTables, ...atlanticBaseTables };
 
 export default function UnifiedOfferForm() {
@@ -17,59 +14,105 @@ export default function UnifiedOfferForm() {
   const [availableModels, setAvailableModels] = useState([]);
   const [tank, setTank] = useState("200 L STAL NIERDZEWNA");
   const [buffer, setBuffer] = useState("Sprzęgło hydrauliczne z osprzętem");
-  const [generatedPdfData, setGeneratedPdfData] = useState(null);
+  const [generatedPdfData, setGeneratedPdfData] = useState(null); // Przechowuje obiekt Blob
   const [trelloCardId, setTrelloCardId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [trelloContext, setTrelloContext] = useState(null); // Do przechowywania kontekstu 't' popupa
+  const [trelloContext, setTrelloContext] = useState(null); // Kontekst 't' dla popupa
 
   useEffect(() => {
-    // Inicjalizacja kontekstu Trello dla popupa
+    console.log("UNIFIED_FORM: useEffect - Inicjalizacja...");
     if (window.TrelloPowerUp) {
-      const t = window.TrelloPowerUp.iframe();
-      setTrelloContext(t);
-      // Odczyt cardId przekazanego przez args w main.js
-      const cardIdFromArgs = t.arg('cardId');
-      if (cardIdFromArgs) {
-        setTrelloCardId(cardIdFromArgs);
-        console.log("UNIFIED_FORM: Trello Card ID from t.arg():", cardIdFromArgs);
-      } else {
-         // Fallback na parametry URL, jeśli t.arg() nie zadziała od razu
-        const params = new URLSearchParams(window.location.search);
-        const cardIdFromUrl = params.get('trelloCardId');
-        if (cardIdFromUrl) {
-            setTrelloCardId(cardIdFromUrl);
-            console.log("UNIFIED_FORM: Trello Card ID from URL:", cardIdFromUrl);
+      console.log("UNIFIED_FORM: TrelloPowerUp jest dostępne.");
+      try {
+        const t = window.TrelloPowerUp.iframe();
+        setTrelloContext(t);
+        console.log("UNIFIED_FORM: Kontekst 't' dla popupa został ustawiony.");
+
+        const cardIdFromArgs = t.arg('cardId');
+        if (cardIdFromArgs) {
+          setTrelloCardId(cardIdFromArgs);
+          console.log("UNIFIED_FORM: Trello Card ID from t.arg():", cardIdFromArgs);
         } else {
+          console.warn("UNIFIED_FORM: Nie znaleziono cardId w t.arg(). Próba odczytu z URL.");
+          const params = new URLSearchParams(window.location.search);
+          const cardIdFromUrl = params.get('trelloCardId');
+          if (cardIdFromUrl) {
+            setTrelloCardId(cardIdFromUrl);
+            console.log("UNIFIED_FORM: Trello Card ID from URL (fallback):", cardIdFromUrl);
+          } else {
             console.warn("UNIFIED_FORM: Nie znaleziono trelloCardId ani w t.arg(), ani w URL.");
+            // Rozważ poinformowanie użytkownika lub zablokowanie przycisku zapisu
+          }
         }
+      } catch (e) {
+        console.error("UNIFIED_FORM: Błąd podczas inicjalizacji kontekstu TrelloPowerUp.iframe():", e);
+        alert("Nie udało się zainicjować integracji z Trello w tym oknie. Spróbuj zamknąć i otworzyć ponownie.");
       }
     } else {
-        console.error("UNIFIED_FORM: TrelloPowerUp nie jest dostępne.");
+      console.error("UNIFIED_FORM: TrelloPowerUp nie jest dostępne! Upewnij się, że skrypt https://p.trellocdn.com/power-up.min.js jest załadowany w index.html tego popupa.");
+      alert("Krytyczny błąd: Brak biblioteki Trello Power-Up w tym oknie.");
     }
-
 
     const modelsForDevice = allDevicesData[deviceType] ? Object.keys(allDevicesData[deviceType]) : [];
     setAvailableModels(modelsForDevice);
     if (!modelsForDevice.includes(model)) {
         setModel(modelsForDevice[0] || "");
     }
-  }, [deviceType, model]);
+  }, [deviceType, model]); // Zależności useEffect
 
   const handleGenerateAndSetPdf = async (e) => {
     e.preventDefault();
     console.log("UNIFIED_FORM: Rozpoczęto generowanie PDF...");
-    const pdfBlob = await generateOfferPDF(price, userName, deviceType, model, tank, buffer);
-    if (pdfBlob) {
-        console.log("UNIFIED_FORM: PDF wygenerowany pomyślnie (jako Blob).");
-        setGeneratedPdfData(pdfBlob);
-    } else {
-        console.error("UNIFIED_FORM: Błąd podczas generowania PDF, pdfBlob jest null.");
-        alert("Wystąpił błąd podczas generowania PDF. Sprawdź konsolę.");
+    setIsSaving(true); // Można użyć tego samego stanu do blokowania przycisków podczas generowania
+    try {
+      const pdfBlob = await generateOfferPDF(price, userName, deviceType, model, tank, buffer);
+      if (pdfBlob instanceof Blob) {
+          console.log("UNIFIED_FORM: PDF wygenerowany pomyślnie (jako Blob). Rozmiar:", pdfBlob.size);
+          setGeneratedPdfData(pdfBlob);
+      } else {
+          console.error("UNIFIED_FORM: generateOfferPDF nie zwrócił obiektu Blob.", pdfBlob);
+          alert("Wystąpił błąd podczas generowania PDF: nieprawidłowy format danych.");
+          setGeneratedPdfData(null);
+      }
+    } catch (error) {
+        console.error("UNIFIED_FORM: Wyjątek podczas generowania PDF:", error);
+        alert("Wystąpił krytyczny błąd podczas generowania PDF.");
+        setGeneratedPdfData(null);
+    } finally {
+        setIsSaving(false);
     }
   };
 
   const handleDownloadPdf = () => {
-    // ... (bez zmian)
+    console.log("UNIFIED_FORM - handleDownloadPdf: Rozpoczęto. generatedPdfData:", generatedPdfData);
+    if (!generatedPdfData) {
+      alert("Najpierw wygeneruj PDF!");
+      console.log("UNIFIED_FORM - handleDownloadPdf: Brak generatedPdfData.");
+      return;
+    }
+    try {
+      if (!(generatedPdfData instanceof Blob)) {
+          console.error("UNIFIED_FORM - handleDownloadPdf: generatedPdfData nie jest obiektem Blob!", generatedPdfData);
+          alert("Błąd: Wygenerowane dane PDF nie są prawidłowym plikiem.");
+          return;
+      }
+      console.log("UNIFIED_FORM - handleDownloadPdf: generatedPdfData jest Blobem. Rozmiar:", generatedPdfData.size, "Typ:", generatedPdfData.type);
+
+      const url = URL.createObjectURL(generatedPdfData);
+      console.log("UNIFIED_FORM - handleDownloadPdf: Utworzono URL obiektu:", url);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `Oferta_KAMAN_${userName.replace(/ /g, '_') || 'klient'}.pdf`;
+      document.body.appendChild(a);
+      console.log("UNIFIED_FORM - handleDownloadPdf: Próba kliknięcia linku pobierania.", a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      console.log("UNIFIED_FORM - handleDownloadPdf: Pobieranie powinno się rozpocząć.");
+    } catch (error) {
+      console.error("UNIFIED_FORM - handleDownloadPdf: Błąd podczas tworzenia URL lub klikania:", error);
+      alert("Wystąpił błąd podczas próby pobrania PDF.");
+    }
   };
 
   const handleSaveToTrello = () => {
@@ -84,33 +127,46 @@ export default function UnifiedOfferForm() {
       return;
     }
     if (!trelloContext) {
-      alert("Błąd inicjalizacji Power-Upa w popupie. Nie można zapisać.");
-      console.error("UNIFIED_FORM: trelloContext (t) jest niedostępny.");
+      alert("Błąd inicjalizacji Power-Upa w popupie. Nie można zapisać. Spróbuj odświeżyć.");
+      console.error("UNIFIED_FORM: trelloContext (t) jest niedostępny. Próba zapisu niemożliwa.");
       return;
     }
+     if (!(generatedPdfData instanceof Blob)) {
+        console.error("UNIFIED_FORM - handleSaveToTrello: generatedPdfData nie jest obiektem Blob!", generatedPdfData);
+        alert("Błąd: Wygenerowane dane PDF nie są prawidłowym plikiem do zapisu.");
+        return;
+    }
 
-    console.log("UNIFIED_FORM: PDF i cardId są dostępne. Rozpoczynanie konwersji do base64.");
+    console.log("UNIFIED_FORM: PDF, cardId i trelloContext są dostępne. Rozpoczynanie konwersji do base64.");
     setIsSaving(true);
 
     const reader = new FileReader();
     reader.onloadend = () => {
       const base64PdfDataUrl = reader.result;
       const dataToReturn = {
-        type: 'TRELLO_SAVE_PDF', // Typ do identyfikacji w main.js
+        type: 'TRELLO_SAVE_PDF',
         pdfDataUrl: base64PdfDataUrl,
-        pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
+        pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_') || 'klient'}.pdf`,
         cardId: trelloCardId
       };
 
       console.log('UNIFIED_FORM: Przygotowano dane do zwrócenia przez t.closePopup():', {
-          ...dataToReturn,
+          type: dataToReturn.type,
+          pdfName: dataToReturn.pdfName,
+          cardId: dataToReturn.cardId,
           pdfDataUrlLength: base64PdfDataUrl ? base64PdfDataUrl.length : 0
       });
-
-      // Zamykamy popup i przekazujemy dane z powrotem do main.js
-      trelloContext.closePopup(dataToReturn);
-      // Nie potrzebujemy już alertu tutaj, bo main.js obsłuży wynik.
-      // setIsSaving(false); // main.js powinien dać znać o wyniku, a popup się zamknie.
+      
+      console.log('UNIFIED_FORM: Wywoływanie trelloContext.closePopup().');
+      try {
+        trelloContext.closePopup(dataToReturn);
+        // Popup powinien zostać zamknięty przez Trello. Stan 'isSaving' nie musi być tutaj resetowany,
+        // ponieważ komponent zostanie odmontowany. Główny skrypt (main.js) obsłuży resztę.
+      } catch (error) {
+        console.error("UNIFIED_FORM: Błąd podczas wywoływania trelloContext.closePopup():", error);
+        alert("Wystąpił błąd podczas próby zamknięcia okna i wysłania danych do Trello.");
+        setIsSaving(false); // Zresetuj stan w przypadku błędu tutaj
+      }
     };
     reader.onerror = (error) => {
       console.error('UNIFIED_FORM: Błąd konwersji PDF na base64:', error);
@@ -120,7 +176,6 @@ export default function UnifiedOfferForm() {
     reader.readAsDataURL(generatedPdfData);
   };
 
-  // ... (reszta JSX formularza jak poprzednio, przycisk Zapisz w Trello wywołuje handleSaveToTrello)
   return (
     <form className="form-container" onSubmit={handleGenerateAndSetPdf}>
       <h2>Generator Ofert KAMAN</h2>
@@ -147,15 +202,16 @@ export default function UnifiedOfferForm() {
 
       <button type="submit" disabled={isSaving}>Generuj PDF</button>
 
-      {generatedPdfData && <button type="button" onClick={handleDownloadPdf} disabled={isSaving}>Pobierz PDF</button>}
+      {generatedPdfData instanceof Blob && <button type="button" onClick={handleDownloadPdf} disabled={isSaving}>Pobierz PDF</button>}
       
-      {generatedPdfData && trelloCardId && trelloContext && 
+      {generatedPdfData instanceof Blob && trelloCardId && trelloContext && 
         <button type="button" onClick={handleSaveToTrello} disabled={isSaving}>
           {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
         </button>
       }
-      {(!generatedPdfData || !trelloCardId || !trelloContext) && 
-        <button type="button" disabled title={!trelloContext ? "Błąd inicjalizacji Power-Upa" : (!trelloCardId ? "ID karty Trello nie zostało wczytane." : "Najpierw wygeneruj PDF.")}>
+      {/* Uproszczony warunek dla nieaktywnego przycisku */}
+      {(!(generatedPdfData instanceof Blob) || !trelloCardId || !trelloContext) && 
+        <button type="button" disabled title={!trelloContext ? "Błąd inicjalizacji Trello" : (!trelloCardId ? "ID karty Trello nie jest dostępne" : "Najpierw wygeneruj PDF")}>
           Zapisz w Trello (niedostępne)
         </button>
       }
