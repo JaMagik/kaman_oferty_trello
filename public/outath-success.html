@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8" />
+  <title>Autoryzacja Trello</title>
+</head>
+<body>
+  <script>
+    // Pobierz tokeny z parametrów URL
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get('accessToken');
+    const accessTokenSecret = params.get('accessTokenSecret');
+
+    if (accessToken && accessTokenSecret) {
+      // Zapisz w localStorage (będziesz to odczytywać w React)
+      localStorage.setItem('trelloAccessToken', accessToken);
+      localStorage.setItem('trelloAccessTokenSecret', accessTokenSecret);
+      // Zamknij popup
+      window.close();
+    } else {
+      document.write("Błąd autoryzacji Trello!");
+    }
+  </script>
+  <p>Autoryzacja... Możesz zamknąć to okno.</p>
+</body>
+</html>
