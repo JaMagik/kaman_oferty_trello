@@ -18,7 +18,7 @@ window.TrelloPowerUp.initialize({
             });
           })
           .then(function (modalReturnData) {
-            // Odbierz dane z modala
+            // Po zamknięciu modala
             if (modalReturnData && modalReturnData.type === 'TRELLO_SAVE_PDF') {
               const { pdfDataUrl, pdfName } = modalReturnData;
               return t_click_context.attach({
@@ -43,7 +43,6 @@ window.TrelloPowerUp.initialize({
             }
           })
           .catch(function (error) {
-            console.error('MAIN.JS: Błąd w callbacku:', error);
             t_click_context.alert({
               message: `Błąd: ${error.message || 'Nieznany'}`,
               duration: 6,
