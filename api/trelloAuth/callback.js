@@ -54,7 +54,7 @@ export default async function handler(req, res) {
 
     // --- PRZEKAZANIE DO FRONTU ---
     // Najprościej: przekieruj z tokenami do ścieżki frontendowej z query params (np. /?accessToken=...&accessTokenSecret=...)
-    const redirectUrl = `${process.env.NEXT_PUBLIC_BASE_URL || process.env.VERCEL_URL}/?accessToken=${accessToken}&accessTokenSecret=${accessTokenSecret}`;
+const redirectUrl = `https://kaman-oferty-trello.vercel.app/?accessToken=${accessToken}&accessTokenSecret=${accessTokenSecret}`;
     res.writeHead(302, { Location: redirectUrl });
     res.end();
 
