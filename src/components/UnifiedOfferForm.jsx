@@ -108,18 +108,13 @@ export default function UnifiedOfferForm() {
       });
       console.log('UNIFIED_FORM: Wysyłanie postMessage do parent z targetOrigin:', KAMAN_APP_ORIGIN);
 
-      if (window.parent) {
-        window.parent.postMessage({
-            type: 'TRELLO_SAVE_PDF',
-            pdfDataUrl: base64PdfDataUrl,
-            pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
-            cardId: trelloCardId
-        }, KAMAN_APP_ORIGIN);
-      } else {
-        console.error("UNIFIED_FORM: window.parent nie jest dostępne. Nie można wysłać wiadomości.");
-        alert("Błąd komunikacji z Trello Power-Up.");
-        setIsSaving(false);
-      }
+     window.TrelloPowerUp && window.TrelloPowerUp.iframe().closeModal({
+  type: 'TRELLO_SAVE_PDF',
+  pdfDataUrl: base64PdfDataUrl,
+  pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
+  cardId: trelloCardId
+});
+
     };
     reader.onerror = (error) => {
       console.error('UNIFIED_FORM: Błąd konwersji PDF na base64:', error);
