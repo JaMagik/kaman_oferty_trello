@@ -6,6 +6,15 @@ html, body {
   overflow: hidden !important;
 }
 
+iframe.plugin-iframe {
+  width: 100% !important;
+  height: 100% !important;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+}
+
+
 body {
   background: linear-gradient(135deg, #a80019 0%, #3c0812 100%);
   min-height: 100vh;
