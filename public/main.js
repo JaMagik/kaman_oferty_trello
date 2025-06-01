@@ -1,7 +1,7 @@
 const KAMAN_APP_URL = 'https://kaman-oferty-trello.vercel.app';
 
 window.TrelloPowerUp.initialize({
-  'card-buttons': function (t, options) {
+  'card-buttons': function (t) {
     return [{
       icon: `${KAMAN_APP_URL}/vite.svg`,
       text: 'Generuj ofertę Kaman',
@@ -18,7 +18,6 @@ window.TrelloPowerUp.initialize({
             });
           })
           .then(function (modalReturnData) {
-            // Po zamknięciu modala
             if (modalReturnData && modalReturnData.type === 'TRELLO_SAVE_PDF') {
               const { pdfDataUrl, pdfName } = modalReturnData;
               return t_click_context.attach({
@@ -26,20 +25,20 @@ window.TrelloPowerUp.initialize({
                 url: pdfDataUrl,
                 mimeType: 'application/pdf'
               })
-              .then(() => {
-                t_click_context.alert({
-                  message: 'Oferta PDF zapisana w Trello!',
-                  duration: 5,
-                  display: 'success'
+                .then(() => {
+                  t_click_context.alert({
+                    message: 'Oferta PDF zapisana w Trello!',
+                    duration: 5,
+                    display: 'success'
+                  });
+                })
+                .catch(err => {
+                  t_click_context.alert({
+                    message: `Błąd zapisu: ${err.message}`,
+                    duration: 8,
+                    display: 'error'
+                  });
                 });
-              })
-              .catch(err => {
-                t_click_context.alert({
-                  message: `Błąd zapisu: ${err.message}`,
-                  duration: 8,
-                  display: 'error'
-                });
-              });
             }
           })
           .catch(function (error) {
@@ -55,5 +54,3 @@ window.TrelloPowerUp.initialize({
 }, {
   appName: 'Kaman Oferty Power-Up'
 });
-
-console.log('MAIN.JS: TrelloPowerUp poprawnie zainicjalizowany.');
