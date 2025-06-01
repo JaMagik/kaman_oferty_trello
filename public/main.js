@@ -55,4 +55,24 @@ window.addEventListener('message', function(event) {
   }
 });
 
+if (window.opener) {
+  window.opener.postMessage({
+    type: 'TRELLO_SAVE_PDF',
+    pdfDataUrl: base64PdfDataUrl,
+    pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
+    cardId: trelloCardId
+  }, KAMAN_APP_ORIGIN);
+} else {
+  console.error("UNIFIED_FORM: window.opener nie jest dostępne. Nie można wysłać wiadomości.");
+  alert("Błąd komunikacji z Trello Power-Up.");
+}
+
+
+window.TrelloPowerUp.iframe().closeModal({
+  type: 'TRELLO_SAVE_PDF',
+  pdfDataUrl: 'data:application/pdf;base64,...',
+  pdfName: 'oferta.pdf',
+});
+
+
 console.log('MAIN.JS: TrelloPowerUp poprawnie zainicjalizowany.');

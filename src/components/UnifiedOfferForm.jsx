@@ -4,10 +4,7 @@ import { generateOfferPDF } from "../utils/pdfGenerator";
 import { mitsubishiBaseTables } from "../data/tables/mitsubishiTables";
 import { atlanticBaseTables } from "../data/tables/atlanticTables";
 
-// Upewnij się, że ta stała odpowiada KAMAN_APP_ORIGIN w main.js
-// Najlepiej byłoby ją pobrać ze zmiennej środowiskowej, jeśli jest dostępna po stronie klienta
-// np. import.meta.env.VITE_APP_URL_ORIGIN lub przekazać z main.js do popupu
-const KAMAN_APP_ORIGIN = 'https://kaman-oferty-trello.vercel.app'; // Dostosuj, jeśli potrzeba
+const KAMAN_APP_ORIGIN = 'https://kaman-oferty-trello.vercel.app';
 
 const allDevicesData = { ...mitsubishiBaseTables, ...atlanticBaseTables };
 
@@ -21,7 +18,7 @@ export default function UnifiedOfferForm() {
   const [buffer, setBuffer] = useState("Sprzęgło hydrauliczne z osprzętem");
   const [generatedPdfData, setGeneratedPdfData] = useState(null);
   const [trelloCardId, setTrelloCardId] = useState(null);
-  const [isSaving, setIsSaving] = useState(false); // Dodatkowy stan do obsługi ładowania
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     const modelsForDevice = allDevicesData[deviceType] ? Object.keys(allDevicesData[deviceType]) : [];
@@ -37,14 +34,36 @@ export default function UnifiedOfferForm() {
       console.log("UNIFIED_FORM: Trello Card ID from URL:", cardIdFromUrl);
     } else {
       console.warn("UNIFIED_FORM: Nie znaleziono trelloCardId w URL.");
-      // Rozważ poinformowanie użytkownika lub zablokowanie przycisku zapisu, jeśli to krytyczne
     }
+
+    const handleMessage = (event) => {
+      if (event.origin !== KAMAN_APP_ORIGIN) return;
+      const { type, status, message } = event.data;
+      if (type === 'TRELLO_SAVE_PDF_RESPONSE') {
+        setIsSaving(false);
+        if (status === 'success') {
+          alert("PDF został pomyślnie zapisany w Trello.");
+          if (window.TrelloPowerUp) {
+            window.TrelloPowerUp.iframe().closeModal();
+          } else {
+            window.close();
+          }
+        } else {
+          alert(`Błąd podczas zapisu PDF: ${message}`);
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+    };
   }, [deviceType, model]);
 
   const handleGenerateAndSetPdf = async (e) => {
     e.preventDefault();
     console.log("UNIFIED_FORM: Rozpoczęto generowanie PDF...");
-    const pdfBlob = await generateOfferPDF(price, userName, deviceType, model, tank, buffer); // Zakładamy, że zwraca Blob
+    const pdfBlob = await generateOfferPDF(price, userName, deviceType, model, tank, buffer);
     if (pdfBlob) {
         console.log("UNIFIED_FORM: PDF wygenerowany pomyślnie (jako Blob).");
         setGeneratedPdfData(pdfBlob);
@@ -76,7 +95,7 @@ export default function UnifiedOfferForm() {
       return;
     }
     console.log("UNIFIED_FORM: PDF i cardId są dostępne. Rozpoczynanie konwersji do base64.");
-    setIsSaving(true); // Rozpocznij ładowanie
+    setIsSaving(true);
 
     const reader = new FileReader();
     reader.onloadend = () => {
@@ -89,27 +108,18 @@ export default function UnifiedOfferForm() {
       });
       console.log('UNIFIED_FORM: Wysyłanie postMessage do parent z targetOrigin:', KAMAN_APP_ORIGIN);
 
-      // Wysyłamy wiadomość do okna, które otworzyło ten popup.
-      // Zakładamy, że `main.js` (w iframe Power-Upa) jest rodzicem lub jest w stanie przechwycić tę wiadomość.
-      // Jeśli `window.opener` jest bardziej odpowiednie (np. jeśli popup jest nowym oknem a nie iframe), dostosuj.
-      // W kontekście `t.popup`, `window.parent` powinno być głównym oknem Trello.
-      // Komunikacja z iframe Power-Upa przez `window.parent` może być skomplikowana.
-      // Rozwiązanie z `t.closePopup` i przekazaniem danych może być bardziej niezawodne.
-      // Na razie zostajemy przy `postMessage`.
       if (window.parent) {
         window.parent.postMessage({
             type: 'TRELLO_SAVE_PDF',
             pdfDataUrl: base64PdfDataUrl,
             pdfName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
             cardId: trelloCardId
-        }, KAMAN_APP_ORIGIN); // Używamy KAMAN_APP_ORIGIN - upewnij się, że main.js na to pozwala
+        }, KAMAN_APP_ORIGIN);
       } else {
         console.error("UNIFIED_FORM: window.parent nie jest dostępne. Nie można wysłać wiadomości.");
         alert("Błąd komunikacji z Trello Power-Up.");
+        setIsSaving(false);
       }
-      // Alert jest informacyjny, ale faktyczne potwierdzenie powinno przyjść od main.js
-      // alert("Polecenie zapisu PDF wysłane do Power-Upa Trello!");
-      // setIsSaving(false); // Przenieś to do momentu otrzymania odpowiedzi lub timeoutu
     };
     reader.onerror = (error) => {
       console.error('UNIFIED_FORM: Błąd konwersji PDF na base64:', error);
@@ -136,13 +146,11 @@ export default function UnifiedOfferForm() {
       <select value={tank} onChange={(e) => setTank(e.target.value)}>
         <option value="200 L STAL NIERDZEWNA">200 L STAL NIERDZEWNA</option>
         <option value="300 L STAL NIERDZEWNA">300 L STAL NIERDZEWNA</option>
-        {/* Dodaj inne opcje jeśli potrzebne */}
       </select>
 
       <select value={buffer} onChange={(e) => setBuffer(e.target.value)}>
         <option value="Sprzęgło hydrauliczne z osprzętem">Sprzęgło hydrauliczne z osprzętem</option>
         <option value="Brak bufora">Brak bufora</option>
-        {/* Dodaj inne opcje jeśli potrzebne */}
       </select>
 
       <button type="submit" disabled={isSaving}>Generuj PDF</button>
@@ -151,7 +159,6 @@ export default function UnifiedOfferForm() {
       {generatedPdfData && trelloCardId && <button type="button" onClick={handleSaveToTrello} disabled={isSaving}>
         {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
       </button>}
-      {/* Przycisk Zapisz w Trello jest nieaktywny, jeśli brakuje cardId lub PDF */}
       {(!generatedPdfData || !trelloCardId) && <button type="button" disabled title={!trelloCardId ? "ID karty Trello nie zostało wczytane." : "Najpierw wygeneruj PDF."}>Zapisz w Trello (niedostępne)</button>}
     </form>
   );
