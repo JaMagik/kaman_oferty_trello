@@ -44,7 +44,7 @@ export default function UnifiedOfferForm() {
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
       const popup = window.open(
-        '/api/trelloAuth/start.js',
+    '/api/trelloAuth/start.js',
          'TrelloAuth',
       `width=${width},height=${height},left=${left},top=${top}`
     );
