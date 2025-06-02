@@ -1,24 +1,31 @@
+// Plik: api/trelloAuth/callback.js
 import OAuth from 'oauth-1.0a';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 
-const OAUTH_ACCESS_TOKEN_URL = '[https://trello.com/1/OAuthGetAccessToken](https://trello.com/1/OAuthGetAccessToken)'; // Poprawiono: Usunięto formatowanie Markdown
+// Upewnij się, że ta stała jest poprawnie zdefiniowana jako string
+const OAUTH_ACCESS_TOKEN_URL = 'https://trello.com/1/OAuthGetAccessToken';
 
 const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
+
+// Ta zmienna jest kluczowa dla poprawnego działania postMessage.
+// Musi ona dokładnie odpowiadać originowi Twojej głównej aplikacji na Vercel.
 const APP_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
 export default async function handler(req, res) {
   console.log('[API Callback] Rozpoczęcie przetwarzania callbacku OAuth Trello.');
   console.log(`[API Callback] Używany APP_BASE_URL (dla postMessage targetOrigin): ${APP_BASE_URL}`);
+  console.log(`[API Callback] Otrzymane query params: ${JSON.stringify(req.query)}`);
 
 
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
-    console.error("[API Callback] Brak klucza API Trello lub sekretu w zmiennych środowiskowych.");
+    console.error("[API Callback] KRYTYCZNY BŁĄD: Brak klucza API Trello lub sekretu w zmiennych środowiskowych.");
+    // Zwróć prosty HTML, który próbuje zamknąć okno
     return res.status(500).send(`
       <!DOCTYPE html><html><head><title>Błąd Konfiguracji</title></head>
       <body><p>Błąd konfiguracji serwera. Skontaktuj się z administratorem.</p>
-      <script>console.error('Błąd konfiguracji serwera w callback.js'); window.close();</script></body></html>
+      <script>console.error('[API Callback Script] Błąd konfiguracji serwera w callback.js'); try { window.close(); } catch(e) { console.error('Błąd przy próbie zamknięcia okna:', e); }</script></body></html>
     `);
   }
 
@@ -35,40 +42,41 @@ export default async function handler(req, res) {
 
 
   if (!oauth_token || !oauth_verifier) {
-    console.error('[API Callback] Brak oauth_token lub oauth_verifier w zapytaniu od Trello.');
+    console.error('[API Callback] BŁĄD: Brak oauth_token lub oauth_verifier w zapytaniu od Trello.');
     res.setHeader('Content-Type', 'text/html');
     return res.status(400).send(`
       <!DOCTYPE html><html><head><title>Błąd Autoryzacji</title></head>
       <body><p>Brak wymaganych parametrów autoryzacji od Trello.</p>
       <script>
-        if (window.opener) {
-          console.log('[API Callback] Wysyłanie TRELLO_OAUTH_ERROR - brak token/verifier do:', '${APP_BASE_URL}');
+        if (window.opener && !window.opener.closed) {
+          console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_ERROR - brak token/verifier do targetOrigin:', '${APP_BASE_URL}');
           window.opener.postMessage({ type: 'TRELLO_OAUTH_ERROR', message: 'Brak oauth_token lub oauth_verifier od Trello.' }, '${APP_BASE_URL}');
         } else {
-          console.error('[API Callback] Brak window.opener do wysłania błędu.');
+          console.error('[API Callback Script] Brak window.opener lub jest zamknięte - nie można wysłać błędu.');
         }
-        window.close();
+        try { window.close(); } catch(e) { console.error('Błąd przy próbie zamknięcia okna:', e); }
       </script></body></html>
     `);
   }
 
-  const request_data_for_access_token = { // Zmieniono nazwę dla jasności
+  // Dane do wygenerowania podpisu dla żądania o access token
+  const request_data_for_access_token = {
     url: OAUTH_ACCESS_TOKEN_URL,
     method: 'POST',
     data: { // Te dane są używane do podpisu OAuth
-      oauth_token: oauth_token, // Użyj tokena otrzymanego od Trello
-      oauth_verifier: oauth_verifier, // Użyj verifiera otrzymanego od Trello
+      oauth_token: oauth_token,
+      oauth_verifier: oauth_verifier,
     },
   };
   
-  // Tworzenie ciała żądania POST
-  const params = new URLSearchParams();
-  params.append('oauth_token', oauth_token);
-  params.append('oauth_verifier', oauth_verifier);
+  // Parametry, które faktycznie zostaną wysłane w ciele żądania POST
+  const params_for_body = new URLSearchParams();
+  params_for_body.append('oauth_token', oauth_token);
+  params_for_body.append('oauth_verifier', oauth_verifier);
   
-  // Generowanie nagłówków OAuth. Ważne: token secret dla request tokena nie jest tutaj używany (jest pusty dla Trello na tym etapie)
-  const token_for_access_request = { key: oauth_token, secret: '' }; // Sekret request tokena nie jest potrzebny do wymiany na access token
-  const auth_headers_for_access_token = oauth.toHeader(oauth.authorize(request_data_for_access_token, token_for_access_request)); 
+  // Token używany do autoryzacji tego konkretnego żądania (request token, sekret nie jest tu potrzebny dla Trello)
+  const token_for_access_request_signature = { key: oauth_token, secret: '' }; 
+  const auth_headers_for_access_token = oauth.toHeader(oauth.authorize(request_data_for_access_token, token_for_access_request_signature)); 
   console.log('[API Callback] Nagłówki autoryzacyjne dla żądania access token:', JSON.stringify(auth_headers_for_access_token));
 
   try {
@@ -76,84 +84,84 @@ export default async function handler(req, res) {
     const response = await fetch(OAUTH_ACCESS_TOKEN_URL, {
       method: 'POST',
       headers: { ...auth_headers_for_access_token, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params, 
+      body: params_for_body, 
     });
 
-    const responseText = await response.text(); // Zmieniono nazwę z 'text' na 'responseText'
+    const responseText = await response.text(); 
     if (!response.ok) {
-      console.error(`[API Callback] Błąd API Trello (${response.status}) przy pobieraniu access token: ${responseText}`);
+      console.error(`[API Callback] BŁĄD API Trello (${response.status}) przy pobieraniu access token: ${responseText}`);
       res.setHeader('Content-Type', 'text/html');
       return res.status(response.status).send(`
         <!DOCTYPE html><html><head><title>Błąd Autoryzacji</title></head>
         <body><p>Nie udało się uzyskać access token od Trello: ${responseText}</p>
         <script>
-          if (window.opener) {
-            console.log('[API Callback] Wysyłanie TRELLO_OAUTH_ERROR - błąd API Trello do:', '${APP_BASE_URL}');
+          if (window.opener && !window.opener.closed) {
+            console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_ERROR - błąd API Trello do targetOrigin:', '${APP_BASE_URL}');
             window.opener.postMessage({ type: 'TRELLO_OAUTH_ERROR', message: 'Nie udało się uzyskać access token od Trello: ${responseText.replace(/'/g, "\\'").replace(/\n/g, "\\n")}' }, '${APP_BASE_URL}');
           } else {
-            console.error('[API Callback] Brak window.opener do wysłania błędu API Trello.');
+            console.error('[API Callback Script] Brak window.opener lub jest zamknięte - nie można wysłać błędu API Trello.');
           }
-          window.close();
+          try { window.close(); } catch(e) { console.error('Błąd przy próbie zamknięcia okna:', e); }
         </script></body></html>
       `);
     }
-    console.log('[API Callback] Otrzymano odpowiedź od Trello dla access token:', responseText);
+    console.log('[API Callback] Otrzymano odpowiedź od Trello dla access token (sukces):', responseText);
 
     const accessParams = new URLSearchParams(responseText);
     const accessToken = accessParams.get('oauth_token');
     const accessTokenSecret = accessParams.get('oauth_token_secret');
 
     if (accessToken && accessTokenSecret) {
-      console.log(`[API Callback] Uzyskano accessToken: ${accessToken}, accessTokenSecret: ${accessTokenSecret.substring(0, 5)}... (skrócony)`);
+      console.log(`[API Callback] SUKCES: Uzyskano accessToken: ${accessToken}, accessTokenSecret: ${accessTokenSecret.substring(0, 5)}... (skrócony)`);
       res.setHeader('Content-Type', 'text/html');
       res.status(200).send(`
         <!DOCTYPE html><html><head><title>Autoryzacja Powiodła Się</title></head>
         <body><p>Autoryzacja zakończona pomyślnie. Zamykanie okna...</p>
         <script>
-          if (window.opener) {
-            console.log('[API Callback] Wysyłanie TRELLO_OAUTH_SUCCESS do:', '${APP_BASE_URL}');
+          if (window.opener && !window.opener.closed) {
+            console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_SUCCESS do targetOrigin:', '${APP_BASE_URL}');
             window.opener.postMessage({
               type: 'TRELLO_OAUTH_SUCCESS',
               accessToken: '${accessToken}',
               accessTokenSecret: '${accessTokenSecret}'
             }, '${APP_BASE_URL}'); // Użyj APP_BASE_URL jako targetOrigin
           } else {
-            console.error('[API Callback] Brak window.opener do wysłania sukcesu.');
+            console.error('[API Callback Script] Brak window.opener lub jest zamknięte - nie można wysłać sukcesu.');
           }
-          window.close();
+          try { window.close(); } catch(e) { console.error('Błąd przy próbie zamknięcia okna:', e); }
         </script></body></html>
       `);
     } else {
-      console.error('[API Callback] Nie znaleziono accessToken lub accessTokenSecret w odpowiedzi Trello:', responseText);
+      console.error('[API Callback] BŁĄD: Nie znaleziono accessToken lub accessTokenSecret w odpowiedzi Trello:', responseText);
       res.setHeader('Content-Type', 'text/html');
       res.status(400).send(`
         <!DOCTYPE html><html><head><title>Błąd Autoryzacji</title></head>
         <body><p>Niekompletne dane autoryzacji otrzymane od Trello.</p>
         <script>
-          if (window.opener) {
-            console.log('[API Callback] Wysyłanie TRELLO_OAUTH_ERROR - niekompletne dane do:', '${APP_BASE_URL}');
+          if (window.opener && !window.opener.closed) {
+            console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_ERROR - niekompletne dane do targetOrigin:', '${APP_BASE_URL}');
             window.opener.postMessage({ type: 'TRELLO_OAUTH_ERROR', message: 'Niekompletne dane autoryzacji od Trello.' }, '${APP_BASE_URL}');
           } else {
-            console.error('[API Callback] Brak window.opener do wysłania błędu niekompletnych danych.');
+            console.error('[API Callback Script] Brak window.opener lub jest zamknięte - nie można wysłać błędu niekompletnych danych.');
           }
-          window.close();
+          try { window.close(); } catch(e) { console.error('Błąd przy próbie zamknięcia okna:', e); }
         </script></body></html>
       `);
     }
   } catch (e) {
-    console.error('[API Callback] Krytyczny błąd w procesie OAuth callback:', e);
+    console.error('[API Callback] KRYTYCZNY BŁĄD w procesie OAuth callback (catch):', e);
     res.setHeader('Content-Type', 'text/html');
     res.status(500).send(`
       <!DOCTYPE html><html><head><title>Błąd Wewnętrzny</title></head>
       <body><p>Wewnętrzny błąd serwera podczas przetwarzania autoryzacji.</p>
       <script>
-        if (window.opener) {
-          console.log('[API Callback] Wysyłanie TRELLO_OAUTH_ERROR - błąd wewnętrzny serwera do:', '${APP_BASE_URL}');
+        if (window.opener && !window.opener.closed) {
+          console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_ERROR - błąd wewnętrzny serwera do targetOrigin:', '${APP_BASE_URL}');
           window.opener.postMessage({ type: 'TRELLO_OAUTH_ERROR', message: 'Wewnętrzny błąd serwera: ${e.message.replace(/'/g, "\\'").replace(/\n/g, "\\n")}' }, '${APP_BASE_URL}');
         } else {
-          console.error('[API Callback] Brak window.opener do wysłania błędu wewnętrznego serwera.');
+          console.error('[API Callback Script] Brak window.opener lub jest zamknięte - nie można wysłać błędu wewnętrznego serwera.');
         }
-        window.close();
+        try { window.close(); } catch(e) { console.error('Błąd przy próbie zamknięcia okna:', e); }
       </script></body></html>
     `);
   }
