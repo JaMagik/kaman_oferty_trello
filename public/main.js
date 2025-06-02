@@ -21,7 +21,7 @@ window.TrelloPowerUp.initialize({
           .then(function (popupReturnData) {
             if (popupReturnData && popupReturnData.type === 'TRELLO_SAVE_PDF') {
               const { pdfDataUrl, pdfName } = popupReturnData;
-              // Konwersja base64 na Blob i File
+           
               return fetch(pdfDataUrl)
                 .then(res => res.blob())
                 .then(blob => {
@@ -62,3 +62,4 @@ window.TrelloPowerUp.initialize({
 }, {
   appName: 'Kaman Oferty Power-Up'
 });
+// Wersja Power-Up: 1.0.0
