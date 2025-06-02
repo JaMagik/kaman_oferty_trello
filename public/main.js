@@ -1,5 +1,4 @@
 const KAMAN_APP_URL = 'https://kaman-oferty-trello.vercel.app';
-const KAMAN_APP_ORIGIN = new URL(KAMAN_APP_URL).origin;
 
 window.TrelloPowerUp.initialize({
   'card-buttons': function (t) {
@@ -11,28 +10,21 @@ window.TrelloPowerUp.initialize({
           .then(function (card) {
             const cardId = card.id;
             const url = `${KAMAN_APP_URL}?trelloCardId=${cardId}`;
-            return t_click_context.popup({
+            return t_click_context.modal({
               url: url,
+              fullscreen: true,
               title: 'Generator Ofert Kaman',
-              height: 750,
               args: { cardId }
             });
           })
-          .then(function (popupReturnData) {
-            if (popupReturnData && popupReturnData.type === 'TRELLO_SAVE_PDF') {
-              const { pdfDataUrl, pdfName } = popupReturnData;
-           
-              return fetch(pdfDataUrl)
-                .then(res => res.blob())
-                .then(blob => {
-                  const file = new File([blob], pdfName, { type: 'application/pdf' });
-                  return t_click_context.attach({
-                    name: pdfName,
-                    url: pdfDataUrl,
-                    file: file,
-                    mimeType: 'application/pdf'
-                  });
-                })
+          .then(function (modalReturnData) {
+            if (modalReturnData && modalReturnData.type === 'TRELLO_SAVE_PDF') {
+              const { pdfDataUrl, pdfName } = modalReturnData;
+              return t_click_context.attach({
+                name: pdfName,
+                url: pdfDataUrl,
+                mimeType: 'application/pdf'
+              })
                 .then(() => {
                   t_click_context.alert({
                     message: 'Oferta PDF zapisana w Trello!',
@@ -62,4 +54,3 @@ window.TrelloPowerUp.initialize({
 }, {
   appName: 'Kaman Oferty Power-Up'
 });
-// Wersja Power-Up: 1.0.0
