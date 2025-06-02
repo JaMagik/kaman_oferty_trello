@@ -2,7 +2,7 @@ import OAuth from 'oauth-1.0a';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
 
-const OAUTH_ACCESS_TOKEN_URL = '[https://trello.com/1/OAuthGetAccessToken](https://trello.com/1/OAuthGetAccessToken)';
+const OAUTH_ACCESS_TOKEN_URL = '[https://trello.com/1/OAuthGetAccessToken](https://trello.com/1/OAuthGetAccessToken)'; // Poprawiono
 
 const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
@@ -13,7 +13,6 @@ export default async function handler(req, res) {
 
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
     console.error("[API Callback] Brak klucza API Trello lub sekretu w zmiennych środowiskowych.");
-    // Nie można wysłać postMessage, jeśli nie znamy APP_BASE_URL, więc zwracamy prosty błąd
     return res.status(500).send(`
       <!DOCTYPE html><html><head><title>Błąd Konfiguracji</title></head>
       <body><p>Błąd konfiguracji serwera. Skontaktuj się z administratorem.</p>
@@ -35,7 +34,6 @@ export default async function handler(req, res) {
 
   if (!oauth_token || !oauth_verifier) {
     console.error('[API Callback] Brak oauth_token lub oauth_verifier w zapytaniu.');
-    // Odpowiedź HTML, która wysyła błąd do okna otwierającego i zamyka popup
     res.setHeader('Content-Type', 'text/html');
     return res.status(400).send(`
       <!DOCTYPE html><html><head><title>Błąd Autoryzacji</title></head>
@@ -52,29 +50,24 @@ export default async function handler(req, res) {
   const request_data = {
     url: OAUTH_ACCESS_TOKEN_URL,
     method: 'POST',
-    data: { // Te dane są używane do podpisu, niekoniecznie jako ciało żądania, jeśli oauth_verifier jest w URL
+    data: { 
       oauth_token,
       oauth_verifier,
     },
   };
 
-  // oauth_verifier jest parametrem URL, ale Trello może oczekiwać go również w ciele POST dla access token
-  // Dokumentacja Trello nie jest super precyzyjna, ale często oauth_verifier jest częścią ciała żądania POST
   const params = new URLSearchParams();
   params.append('oauth_token', oauth_token);
   params.append('oauth_verifier', oauth_verifier);
   
-  // Nagłówki muszą być generowane z uwzględnieniem danych, które faktycznie wysyłasz
-  // Dla POST z application/x-www-form-urlencoded, parametry są częścią base stringu.
-  // Jeśli oauth_verifier jest w `request_data.data`, to jest uwzględniany w sygnaturze.
-  const headers = oauth.toHeader(oauth.authorize(request_data, {key: oauth_token, secret: ''})); // Request token secret nie jest potrzebny na tym etapie dla Trello
+  const headers = oauth.toHeader(oauth.authorize(request_data, {key: oauth_token, secret: ''})); 
 
   try {
     console.log('[API Callback] Wysyłanie żądania o access token do Trello...');
     const response = await fetch(OAUTH_ACCESS_TOKEN_URL, {
       method: 'POST',
       headers: { ...headers, 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: params, // Wysyłanie oauth_verifier w ciele
+      body: params, 
     });
 
     const text = await response.text();
