@@ -11,17 +11,19 @@ const TRELLO_SECRET = process.env.TRELLO_SECRET;
 
 // Ta zmienna jest kluczowa dla poprawnego działania postMessage.
 // Musi ona dokładnie odpowiadać originowi Twojej głównej aplikacji na Vercel.
+// Najlepiej, jeśli NEXT_PUBLIC_BASE_URL jest jawnie ustawiona w zmiennych środowiskowych Vercel
+// na https://kaman-oferty-trello.vercel.app
 const APP_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
 export default async function handler(req, res) {
   console.log('[API Callback] Rozpoczęcie przetwarzania callbacku OAuth Trello.');
-  console.log(`[API Callback] Używany APP_BASE_URL (dla postMessage targetOrigin): ${APP_BASE_URL}`);
-  console.log(`[API Callback] Otrzymane query params: ${JSON.stringify(req.query)}`);
+  // BARDZO WAŻNY LOG: Sprawdź tę wartość w logach funkcji na Vercel!
+  console.log(`[API Callback] Używany APP_BASE_URL (jako targetOrigin dla postMessage): ${APP_BASE_URL}`);
+  console.log(`[API Callback] Otrzymane query params z Trello: ${JSON.stringify(req.query)}`);
 
 
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
     console.error("[API Callback] KRYTYCZNY BŁĄD: Brak klucza API Trello lub sekretu w zmiennych środowiskowych.");
-    // Zwróć prosty HTML, który próbuje zamknąć okno
     return res.status(500).send(`
       <!DOCTYPE html><html><head><title>Błąd Konfiguracji</title></head>
       <body><p>Błąd konfiguracji serwera. Skontaktuj się z administratorem.</p>
@@ -49,6 +51,7 @@ export default async function handler(req, res) {
       <body><p>Brak wymaganych parametrów autoryzacji od Trello.</p>
       <script>
         if (window.opener && !window.opener.closed) {
+          // Używamy jawnie APP_BASE_URL, który został zdefiniowany na górze tego pliku
           console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_ERROR - brak token/verifier do targetOrigin:', '${APP_BASE_URL}');
           window.opener.postMessage({ type: 'TRELLO_OAUTH_ERROR', message: 'Brak oauth_token lub oauth_verifier od Trello.' }, '${APP_BASE_URL}');
         } else {
@@ -59,22 +62,19 @@ export default async function handler(req, res) {
     `);
   }
 
-  // Dane do wygenerowania podpisu dla żądania o access token
   const request_data_for_access_token = {
     url: OAUTH_ACCESS_TOKEN_URL,
     method: 'POST',
-    data: { // Te dane są używane do podpisu OAuth
+    data: { 
       oauth_token: oauth_token,
       oauth_verifier: oauth_verifier,
     },
   };
   
-  // Parametry, które faktycznie zostaną wysłane w ciele żądania POST
   const params_for_body = new URLSearchParams();
   params_for_body.append('oauth_token', oauth_token);
   params_for_body.append('oauth_verifier', oauth_verifier);
   
-  // Token używany do autoryzacji tego konkretnego żądania (request token, sekret nie jest tu potrzebny dla Trello)
   const token_for_access_request_signature = { key: oauth_token, secret: '' }; 
   const auth_headers_for_access_token = oauth.toHeader(oauth.authorize(request_data_for_access_token, token_for_access_request_signature)); 
   console.log('[API Callback] Nagłówki autoryzacyjne dla żądania access token:', JSON.stringify(auth_headers_for_access_token));
@@ -119,12 +119,13 @@ export default async function handler(req, res) {
         <body><p>Autoryzacja zakończona pomyślnie. Zamykanie okna...</p>
         <script>
           if (window.opener && !window.opener.closed) {
+            // Używamy jawnie APP_BASE_URL, który został zdefiniowany na górze tego pliku
             console.log('[API Callback Script] Wysyłanie TRELLO_OAUTH_SUCCESS do targetOrigin:', '${APP_BASE_URL}');
             window.opener.postMessage({
               type: 'TRELLO_OAUTH_SUCCESS',
               accessToken: '${accessToken}',
               accessTokenSecret: '${accessTokenSecret}'
-            }, '${APP_BASE_URL}'); // Użyj APP_BASE_URL jako targetOrigin
+            }, '${APP_BASE_URL}'); 
           } else {
             console.error('[API Callback Script] Brak window.opener lub jest zamknięte - nie można wysłać sukcesu.');
           }
