@@ -10,4 +10,17 @@ function App() {
   );
 }
 
+useEffect(() => {
+  const hash = window.location.hash;
+  if (hash) {
+    const params = new URLSearchParams(hash.substring(1));
+    const token = params.get('token');
+    if (token) {
+      localStorage.setItem('trello_token', token);
+      window.location.hash = '';
+    }
+  }
+}, []);
+
+
 export default App;
