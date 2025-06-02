@@ -43,9 +43,9 @@ export default function UnifiedOfferForm() {
     const width = 600, height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    const popup = window.open(
-      '/api/trello/Auth/startFront.jsx',
-      'TrelloAuth',
+      const popup = window.open(
+        '/api/trelloAuth/start.js',
+         'TrelloAuth',
       `width=${width},height=${height},left=${left},top=${top}`
     );
     // Listener na wiadomość z popupu (jednorazowy)
