@@ -4,8 +4,6 @@ import { generateOfferPDF } from "../utils/pdfGenerator";
 import { mitsubishiBaseTables } from "../data/tables/mitsubishiTables";
 import { atlanticBaseTables } from "../data/tables/atlanticTables";
 
-const KAMAN_APP_ORIGIN = 'https://kaman-oferty-trello.vercel.app';
-
 const allDevicesData = { ...mitsubishiBaseTables, ...atlanticBaseTables };
 
 export default function UnifiedOfferForm() {
@@ -20,6 +18,7 @@ export default function UnifiedOfferForm() {
   const [trelloCardId, setTrelloCardId] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem("trello_token") || "");
+  const [accessTokenSecret, setAccessTokenSecret] = useState(() => localStorage.getItem("trello_access_token_secret") || "");
 
   useEffect(() => {
     const modelsForDevice = allDevicesData[deviceType] ? Object.keys(allDevicesData[deviceType]) : [];
@@ -34,7 +33,6 @@ export default function UnifiedOfferForm() {
       setTrelloCardId(cardIdFromUrl);
     }
 
-    // Pobierz token z URL (OAuth) i zapisz go w localStorage
     const hash = window.location.hash;
     if (hash) {
       const tokenParams = new URLSearchParams(hash.substring(1));
@@ -51,11 +49,22 @@ export default function UnifiedOfferForm() {
     const width = 600, height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-    window.open(
-      `https://trello.com/1/authorize?expiration=never&name=KAMAN_APP&scope=read,write&response_type=token&key=YOUR_API_KEY&return_url=${KAMAN_APP_ORIGIN}`,
+    const popup = window.open(
+      '/api/trelloAuth/start.js',
       'TrelloAuth',
       `width=${width},height=${height},left=${left},top=${top}`
     );
+    const receiveMessage = (event) => {
+      if (event.origin !== window.location.origin) return;
+      if (event.data.type === 'TRELLO_OAUTH_SUCCESS') {
+        setAccessToken(event.data.accessToken);
+        setAccessTokenSecret(event.data.accessTokenSecret);
+        localStorage.setItem('trello_access_token', event.data.accessToken);
+        localStorage.setItem('trello_access_token_secret', event.data.accessTokenSecret);
+        alert("Połączono z Trello!");
+      }
+    };
+    window.addEventListener('message', receiveMessage, { once: true });
   };
 
   const handleGenerateAndSetPdf = async (e) => {
@@ -78,32 +87,47 @@ export default function UnifiedOfferForm() {
     URL.revokeObjectURL(url);
   };
 
-  const handleSaveToTrello = async () => {
+  const handleSaveToTrello = () => {
     if (!generatedPdfData) return alert("Najpierw wygeneruj PDF!");
     if (!trelloCardId) return alert("Brak ID karty Trello.");
-    if (!accessToken) return alert("Brak autoryzacji Trello.");
-
-    setIsSaving(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', generatedPdfData, `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`);
-
-      const response = await fetch(`https://api.trello.com/1/cards/${trelloCardId}/attachments?key=YOUR_API_KEY&token=${accessToken}`, {
-        method: 'POST',
-        body: formData
-      });
-
-      if (!response.ok) {
-        throw new Error(`Błąd: ${response.statusText}`);
-      }
-
-      alert('PDF został pomyślnie dodany do karty Trello.');
-    } catch (error) {
-      console.error('Błąd:', error);
-      alert(`Błąd zapisu w Trello: ${error.message}`);
-    } finally {
-      setIsSaving(false);
+    if (!accessToken || !accessTokenSecret) {
+      alert("Brak autoryzacji Trello. Najpierw połącz z Trello!");
+      return;
     }
+    setIsSaving(true);
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64PdfDataUrl = reader.result;
+      try {
+        const res = await fetch('/api/saveToTrello.js', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            cardId: trelloCardId,
+            accessToken,
+            accessTokenSecret,
+            fileDataUrl: base64PdfDataUrl,
+            fileName: `Oferta_KAMAN_${userName.replace(/ /g, '_')}.pdf`,
+          }),
+        });
+        const data = await res.json();
+        setIsSaving(false);
+        if (res.ok) {
+          alert("PDF został zapisany w Trello!");
+        } else {
+          alert("Błąd zapisu w Trello: " + data.message);
+        }
+      } catch (error) {
+        setIsSaving(false);
+        alert("Błąd zapisu w Trello: " + error.message);
+      }
+    };
+    reader.onerror = (error) => {
+      alert('Błąd przygotowania PDF do wysłania.');
+      setIsSaving(false);
+    };
+    reader.readAsDataURL(generatedPdfData);
   };
 
   return (
@@ -111,31 +135,31 @@ export default function UnifiedOfferForm() {
       <h2>Generator Ofert KAMAN</h2>
       <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Imię i nazwisko klienta" required />
       <input type="text" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Cena końcowa" required />
-
       <select value={deviceType} onChange={(e) => setDeviceType(e.target.value)}>
         {Object.keys(allDevicesData).map(type => <option key={type} value={type}>{type}</option>)}
       </select>
-
       <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!availableModels.length}>
         {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
       </select>
-
       <select value={tank} onChange={(e) => setTank(e.target.value)}>
         <option value="200 L STAL NIERDZEWNA">200 L STAL NIERDZEWNA</option>
         <option value="300 L STAL NIERDZEWNA">300 L STAL NIERDZEWNA</option>
       </select>
-
       <select value={buffer} onChange={(e) => setBuffer(e.target.value)}>
         <option value="Sprzęgło hydrauliczne z osprzętem">Sprzęgło hydrauliczne z osprzętem</option>
         <option value="Brak bufora">Brak bufora</option>
       </select>
-
       <button type="submit" disabled={isSaving}>Generuj PDF</button>
       {generatedPdfData && <button type="button" onClick={handleDownloadPdf} disabled={isSaving}>Pobierz PDF</button>}
-      <button type="button" onClick={handleTrelloAuth} disabled={!!accessToken} style={{ background: !!accessToken ? "#ccc" : "#026aa7" }}>
-        {!accessToken ? "Połącz z Trello" : "Połączono z Trello"}
+      <button
+        type="button"
+        onClick={handleTrelloAuth}
+        disabled={!!accessToken && !!accessTokenSecret}
+        style={{ background: (!!accessToken && !!accessTokenSecret) ? "#ccc" : "#026aa7" }}
+      >
+        {(!accessToken || !accessTokenSecret) ? "Połącz z Trello" : "Połączono z Trello"}
       </button>
-      {generatedPdfData && trelloCardId && <button type="button" onClick={handleSaveToTrello} disabled={isSaving || !accessToken}>
+      {generatedPdfData && trelloCardId && <button type="button" onClick={handleSaveToTrello} disabled={isSaving || !accessToken || !accessTokenSecret}>
         {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
       </button>}
       {(!generatedPdfData || !trelloCardId) && <button type="button" disabled>
