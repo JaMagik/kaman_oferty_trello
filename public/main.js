@@ -1,4 +1,3 @@
-// main.js
 const KAMAN_APP_URL = 'https://kaman-oferty-trello.vercel.app';
 const KAMAN_APP_ORIGIN = new URL(KAMAN_APP_URL).origin;
 
@@ -11,16 +10,18 @@ window.TrelloPowerUp.initialize({
         return t_click_context.card('id')
           .then(function (card) {
             const cardId = card.id;
-            const url = `${KAMAN_APP_URL}/trelloAuth/startFront?cardId=${cardId}`;
+            const url = `${KAMAN_APP_URL}?trelloCardId=${cardId}`;
             return t_click_context.popup({
-              title: 'Generator Ofert Kaman',
               url: url,
-              height: 750
+              title: 'Generator Ofert Kaman',
+              height: 750,
+              args: { cardId }
             });
           })
           .then(function (popupReturnData) {
             if (popupReturnData && popupReturnData.type === 'TRELLO_SAVE_PDF') {
               const { pdfDataUrl, pdfName } = popupReturnData;
+           
               return fetch(pdfDataUrl)
                 .then(res => res.blob())
                 .then(blob => {
@@ -61,3 +62,4 @@ window.TrelloPowerUp.initialize({
 }, {
   appName: 'Kaman Oferty Power-Up'
 });
+// Wersja Power-Up: 1.0.0
