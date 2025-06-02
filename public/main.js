@@ -1,4 +1,6 @@
 const KAMAN_APP_URL = 'https://kaman-oferty-trello.vercel.app';
+const KAMAN_APP_ORIGIN = new URL(KAMAN_APP_URL).origin;
+
 
 window.TrelloPowerUp.initialize({
   'card-buttons': function (t) {
