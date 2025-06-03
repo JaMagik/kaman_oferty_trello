@@ -75,7 +75,7 @@ export default async function handler(req, res) {
   // Zamiast tego, używa się samego request tokena (oauth_token) i API secret (consumer secret) do podpisania.
   // W bibliotece 'oauth-1.0a', jeśli token secret nie jest jawnie podany w obiekcie 'token',
   // biblioteka użyje consumer secret. W tym przypadku, Trello tego wymaga.
-  const token_for_access_request_signature = { key: oauth_token, secret: '' }; // Używamy pustego stringa dla token secret, oauth-1.0a użyje consumer secret.
+  const token_for_access_request_signature = { key: oauth_token }; // Używamy pustego stringa dla token secret, oauth-1.0a użyje consumer secret.
 
   const auth_headers_for_access_token = oauth.toHeader(oauth.authorize(request_data_for_access_token, token_for_access_request_signature));
   console.log('[API Callback] Nagłówki autoryzacyjne dla żądania access token:', JSON.stringify(auth_headers_for_access_token)); // LOG 6.1
