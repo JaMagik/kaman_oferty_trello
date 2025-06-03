@@ -14,7 +14,7 @@ const APP_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || (process.env.VERCEL_URL
 
 export default async function handler(req, res) {
   console.log('[API Start] Rozpoczęcie procesu OAuth Trello.');
-  console.log(`[API Start] Używany APP_BASE_URL: ${APP_BASE_URL}`);
+  console.log(`[API Start] Używany APP_BASE_URL do konstruowania callback: ${APP_BASE_URL}`);
 
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
     console.error("[API Start] Brak klucza API Trello lub sekretu w zmiennych środowiskowych.");
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
   });
 
   const oauth_callback_url = `${APP_BASE_URL}/api/trelloAuth/callback.js`;
-  console.log(`[API Start] URL zwrotny OAuth: ${oauth_callback_url}`);
+  console.log(`[API Start] URL zwrotny OAuth, który zostanie wysłany do Trello: ${oauth_callback_url}`);
 
   const request_data = {
     url: OAUTH_REQUEST_TOKEN_URL,
@@ -73,32 +73,10 @@ export default async function handler(req, res) {
     res.writeHead(302, { Location: redirectUrl });
     res.end();
   } catch (e) {
-    console.error('[API Start] Krytyczny błąd w procesie OAuth:', e);
+    console.error('[API Start] Krytyczny błąd w procesie OAuth:', e.message, e.stack);
     res.status(500).json({ error: 'Błąd procesu OAuth', details: e.message });
   }
 }
-export async function uploadAttachment(cardId, file) {
-  const apiKey = 'YOUR_API_KEY';
-  const apiToken = localStorage.getItem('trello_token');
 
-  const formData = new FormData();
-  formData.append('file', file);
-
-  try {
-    const response = await fetch(`https://api.trello.com/1/cards/${cardId}/attachments?key=${apiKey}&token=${apiToken}`, {
-      method: 'POST',
-      body: formData
-    });
-
-    if (!response.ok) {
-      throw new Error(`Błąd: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    console.log('Załącznik dodany:', data);
-    alert('Załącznik został pomyślnie dodany do karty Trello.');
-  } catch (error) {
-    console.error('Błąd:', error);
-    alert(`Wystąpił błąd podczas dodawania załącznika: ${error.message}`);
-  }
-}
+// Poniższa funkcja uploadAttachment jest tutaj niepotrzebna, znajdowała się w jednym z dostarczonych plików, ale nie jest częścią logiki start.js
+// export async function uploadAttachment(cardId, file) { ... }
