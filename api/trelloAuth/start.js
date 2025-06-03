@@ -29,7 +29,7 @@ export default async function handler(req, res) {
     }
   });
 
-  const oauth_callback_url = `${APP_BASE_URL}/api/trelloAuth/callback.js`;
+  const oauth_callback_url = `${APP_BASE_URL}/api/trelloAuth/callback`;
   console.log(`[API Start] URL zwrotny OAuth, który zostanie wysłany do Trello: ${oauth_callback_url}`);
 
   const request_data = {
