@@ -13,8 +13,9 @@
 
     if (accessToken && accessTokenSecret) {
       // Zapisz w localStorage (będziesz to odczytywać w React)
-      localStorage.setItem('trelloAccessToken', accessToken);
-      localStorage.setItem('trelloAccessTokenSecret', accessTokenSecret);
+    localStorage.setItem('trello_access_token', accessToken);
+localStorage.setItem('trello_access_token_secret', accessTokenSecret);
+
       // Zamknij popup
       window.close();
     } else {
