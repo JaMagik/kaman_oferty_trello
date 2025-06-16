@@ -8,8 +8,8 @@ const OAUTH_AUTHORIZE_URL = 'https://trello.com/1/OAuthAuthorizeToken';
 const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
 
-const APP_BASE_URL =
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+// === OSTATECZNA POPRAWKA: Ustawiamy URL na stałe ===
+const APP_BASE_URL = 'https://kaman-oferty-trello.vercel.app';
 
 export default async function handler(req, res) {
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
@@ -26,12 +26,6 @@ export default async function handler(req, res) {
   });
 
   const oauth_callback_url = `${APP_BASE_URL}/api/trelloAuth/callback`;
-
-  // =================================================================
-  // == KROK DEBUGOWANIA: ZAPISUJEMY URL W LOGACH SERWERA ==
-  console.log(`[DEBUG] Wygenerowany URL zwrotny (callback) to: ${oauth_callback_url}`);
-  console.log(`[DEBUG] Zmienna process.env.VERCEL_URL to: ${process.env.VERCEL_URL}`);
-  // =================================================================
 
   const request_data = {
     url: OAUTH_REQUEST_TOKEN_URL,

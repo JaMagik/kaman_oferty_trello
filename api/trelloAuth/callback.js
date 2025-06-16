@@ -6,14 +6,12 @@ const OAUTH_ACCESS_TOKEN_URL = 'https://trello.com/1/OAuthGetAccessToken';
 const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
 
-const APP_BASE_URL =
-  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+// === OSTATECZNA POPRAWKA: Ustawiamy URL na stałe ===
+const APP_BASE_URL = 'https://kaman-oferty-trello.vercel.app';
   
-// Helper do parsowania cookies
 const parseCookies = (cookieHeader) => {
   const list = {};
   if (!cookieHeader) return list;
-
   cookieHeader.split(';').forEach(cookie => {
     let [name, ...rest] = cookie.split('=');
     name = name?.trim();
@@ -22,7 +20,6 @@ const parseCookies = (cookieHeader) => {
     if (!value) return;
     list[name] = decodeURIComponent(value);
   });
-
   return list;
 };
 
@@ -32,8 +29,6 @@ export default async function handler(req, res) {
   }
   
   const { oauth_token, oauth_verifier } = req.query;
-  
-  // POPRAWKA: Odczytujemy sekret zapisany w cookie
   const cookies = parseCookies(req.headers.cookie);
   const oauth_token_secret = cookies.trello_oauth_secret;
 
@@ -59,7 +54,6 @@ export default async function handler(req, res) {
   params.append('oauth_token', oauth_token);
   params.append('oauth_verifier', oauth_verifier);
 
-  // POPRAWKA: Podpisujemy zapytanie używając sekretu z cookie
   const headers = oauth.toHeader(
     oauth.authorize(request_data, { key: oauth_token, secret: oauth_token_secret })
   );
@@ -72,8 +66,6 @@ export default async function handler(req, res) {
     });
 
     const text = await response.text();
-
-    // POPRAWKA: Usuwamy cookie po użyciu
     res.setHeader('Set-Cookie', 'trello_oauth_secret=; HttpOnly; Path=/; Max-Age=0');
 
     if (!response.ok) {
@@ -88,7 +80,6 @@ export default async function handler(req, res) {
       return res.status(400).send("Niekompletne dane z Trello.");
     }
 
-    // Odpowiedź HTML do popupu, która wysyła tokeny do głównego okna
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
       <!DOCTYPE html><html><head><title>Autoryzacja Trello</title></head>
