@@ -7,17 +7,38 @@ const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
 
 const APP_BASE_URL =
-  (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, '')) ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  
+// Helper do parsowania cookies
+const parseCookies = (cookieHeader) => {
+  const list = {};
+  if (!cookieHeader) return list;
+
+  cookieHeader.split(';').forEach(cookie => {
+    let [name, ...rest] = cookie.split('=');
+    name = name?.trim();
+    if (!name) return;
+    const value = rest.join('=').trim();
+    if (!value) return;
+    list[name] = decodeURIComponent(value);
+  });
+
+  return list;
+};
 
 export default async function handler(req, res) {
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
     return res.status(500).send("Brak kluczy Trello.");
   }
-
+  
   const { oauth_token, oauth_verifier } = req.query;
-  if (!oauth_token || !oauth_verifier) {
-    return res.status(400).send("Brak wymaganych parametrów autoryzacji od Trello.");
+  
+  // POPRAWKA: Odczytujemy sekret zapisany w cookie
+  const cookies = parseCookies(req.headers.cookie);
+  const oauth_token_secret = cookies.trello_oauth_secret;
+
+  if (!oauth_token || !oauth_verifier || !oauth_token_secret) {
+    return res.status(400).send("Brak wymaganych parametrów autoryzacji. Sesja mogła wygasnąć.");
   }
 
   const oauth = OAuth({
@@ -33,14 +54,14 @@ export default async function handler(req, res) {
     method: 'POST',
     data: { oauth_token, oauth_verifier }
   };
-
+  
   const params = new URLSearchParams();
   params.append('oauth_token', oauth_token);
   params.append('oauth_verifier', oauth_verifier);
 
-  // MUSI być secret: ''
+  // POPRAWKA: Podpisujemy zapytanie używając sekretu z cookie
   const headers = oauth.toHeader(
-    oauth.authorize(request_data, { key: oauth_token, secret: '' })
+    oauth.authorize(request_data, { key: oauth_token, secret: oauth_token_secret })
   );
 
   try {
@@ -51,6 +72,9 @@ export default async function handler(req, res) {
     });
 
     const text = await response.text();
+
+    // POPRAWKA: Usuwamy cookie po użyciu
+    res.setHeader('Set-Cookie', 'trello_oauth_secret=; HttpOnly; Path=/; Max-Age=0');
 
     if (!response.ok) {
       return res.status(response.status).send(`Błąd Trello: ${text}`);
@@ -64,7 +88,7 @@ export default async function handler(req, res) {
       return res.status(400).send("Niekompletne dane z Trello.");
     }
 
-    // Prosta odpowiedź HTML do popupu
+    // Odpowiedź HTML do popupu, która wysyła tokeny do głównego okna
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
       <!DOCTYPE html><html><head><title>Autoryzacja Trello</title></head>

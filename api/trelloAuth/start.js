@@ -9,7 +9,6 @@ const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
 
 const APP_BASE_URL =
-  (process.env.NEXT_PUBLIC_BASE_URL && process.env.NEXT_PUBLIC_BASE_URL.replace(/\/$/, '')) ||
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
 export default async function handler(req, res) {
@@ -26,7 +25,6 @@ export default async function handler(req, res) {
     }
   });
 
-  // UWAGA: brak .js na końcu!
   const oauth_callback_url = `${APP_BASE_URL}/api/trelloAuth/callback`;
 
   const request_data = {
@@ -54,11 +52,18 @@ export default async function handler(req, res) {
 
     const requestParams = new URLSearchParams(text);
     const oauth_token = requestParams.get('oauth_token');
-    if (!oauth_token) {
-      console.error("Brak oauth_token w odpowiedzi Trello:", text);
-      return res.status(500).json({ error: 'Brak oauth_token w odpowiedzi.', details: text });
+    // POPRAWKA: Pobieramy i używamy oauth_token_secret
+    const oauth_token_secret = requestParams.get('oauth_token_secret');
+
+    if (!oauth_token || !oauth_token_secret) {
+      console.error("Brak oauth_token lub oauth_token_secret w odpowiedzi Trello:", text);
+      return res.status(500).json({ error: 'Niekompletna odpowiedź z Trello.', details: text });
     }
 
+    // POPRAWKA: Zapisujemy sekret w bezpiecznym, tymczasowym cookie
+    res.setHeader('Set-Cookie', `trello_oauth_secret=${oauth_token_secret}; HttpOnly; Path=/; Secure; SameSite=Lax; Max-Age=300`); // Ważność 5 minut
+
+    // Przekierowujemy użytkownika do Trello w celu autoryzacji
     const redirectUrl = `${OAUTH_AUTHORIZE_URL}?oauth_token=${oauth_token}&name=KamanOferty&scope=read,write&expiration=never`;
     res.writeHead(302, { Location: redirectUrl });
     res.end();
