@@ -32,11 +32,10 @@ export default function UnifiedOfferForm() {
     const cardIdFromUrl = params.get('trelloCardId');
     if (cardIdFromUrl) {
       setTrelloCardId(cardIdFromUrl);
-      console.log("UNIFIED_FORM: Trello Card ID from URL:", cardIdFromUrl);
     }
   }, [deviceType, model]);
 
-  // ### NOWA, ULEPSZONA OBSŁUGA AUTORYZACJI ###
+  // Nasłuchuje na zmiany w localStorage po autoryzacji w popupie
   useEffect(() => {
     const handleStorageChange = (event) => {
       if (event.key === 'trello_access_token' || event.key === 'trello_access_token_secret') {
@@ -49,13 +48,11 @@ export default function UnifiedOfferForm() {
         }
       }
     };
-
     window.addEventListener('storage', handleStorageChange);
-
     return () => {
       window.removeEventListener('storage', handleStorageChange);
     };
-  }, []); // Pusta tablica zależności sprawi, że listener ustawi się raz
+  }, []);
 
   const handleTrelloAuth = () => {
     const width = 600, height = 600;
@@ -66,12 +63,11 @@ export default function UnifiedOfferForm() {
       'TrelloAuth',
       `width=${width},height=${height},left=${left},top=${top}`
     );
-    // Usunęliśmy stary listener 'message'
   };
 
   const handleGenerateAndSetPdf = async (e) => {
     e.preventDefault();
-    console.log("UNIFIED_FORM: Rozpoczęto generowanie PDF...");
+    setGeneratedPdfData(null); // Resetuj stan PDF przed nowym generowaniem
     const pdfBlob = await generateOfferPDF(price, userName, deviceType, model, tank, buffer);
     if (pdfBlob) {
       setGeneratedPdfData(pdfBlob);
@@ -91,7 +87,8 @@ export default function UnifiedOfferForm() {
   };
 
   const handleSaveToTrello = () => {
-    if (!generatedPdfData) return alert("Najpierw wygeneruj PDF!");
+    // ... (reszta funkcji saveToTrello bez zmian)
+     if (!generatedPdfData) return alert("Najpierw wygeneruj PDF!");
     if (!trelloCardId) {
       alert("Brak ID karty Trello. Nie można zapisać.");
       return;
@@ -136,35 +133,33 @@ export default function UnifiedOfferForm() {
     reader.readAsDataURL(generatedPdfData);
   };
 
-  // ### ZMIENIONA LOGIKA WYŚWIETLANIA PRZYCISKÓW DLA JASNOŚCI ###
   const isAuthorized = !!accessToken && !!accessTokenSecret;
   const isReadyToSave = !!generatedPdfData && !!trelloCardId;
 
   return (
     <form className="form-container" onSubmit={handleGenerateAndSetPdf}>
       <h2>Generator Ofert KAMAN</h2>
-      {/* ... (pola input bez zmian) ... */}
-       <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Imię i nazwisko klienta" required />
+      <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Imię i nazwisko klienta" required />
       <input type="text" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Cena końcowa" required />
 
-      <select value={deviceType} onChange={(e) => setDeviceType(e.target.value)}>
+      <select value={deviceType} onChange={(e) => { setDeviceType(e.target.value); setGeneratedPdfData(null); }}>
         {Object.keys(allDevicesData).map(type => <option key={type} value={type}>{type}</option>)}
       </select>
 
-      <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!availableModels.length}>
+      <select value={model} onChange={(e) => { setModel(e.target.value); setGeneratedPdfData(null); }} disabled={!availableModels.length}>
         {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
       </select>
 
-      <select value={tank} onChange={(e) => setTank(e.target.value)}>
+      <select value={tank} onChange={(e) => { setTank(e.target.value); setGeneratedPdfData(null); }}>
         <option value="200 L STAL NIERDZEWNA">200 L STAL NIERDZEWNA</option>
         <option value="300 L STAL NIERDZEWNA">300 L STAL NIERDZEWNA</option>
       </select>
 
-      <select value={buffer} onChange={(e) => setBuffer(e.target.value)}>
+      <select value={buffer} onChange={(e) => { setBuffer(e.target.value); setGeneratedPdfData(null); }}>
         <option value="Sprzęgło hydrauliczne z osprzętem">Sprzęgło hydrauliczne z osprzętem</option>
         <option value="Brak bufora">Brak bufora</option>
       </select>
-
+      
       <button type="submit" disabled={isSaving}>Generuj PDF</button>
 
       {generatedPdfData && <button type="button" onClick={handleDownloadPdf} disabled={isSaving}>Pobierz PDF</button>}
@@ -177,14 +172,11 @@ export default function UnifiedOfferForm() {
       >
         {isAuthorized ? "Połączono z Trello" : "Połącz z Trello"}
       </button>
-
-      {isReadyToSave ? (
+      
+      {/* Ta część jest kluczowa */}
+      {isReadyToSave && (
         <button type="button" onClick={handleSaveToTrello} disabled={isSaving || !isAuthorized}>
           {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
-        </button>
-      ) : (
-        <button type="button" disabled title="Najpierw wygeneruj PDF, aby zapisać go w Trello">
-          Zapisz w Trello (niedostępne)
         </button>
       )}
     </form>
