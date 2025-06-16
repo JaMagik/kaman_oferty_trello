@@ -1,3 +1,5 @@
+// jamagik/kaman_oferty_trello/kaman_oferty_trello-bfb2142551adeb7f98df4053f558f65743fcf124/api/trelloAuth/callback.js
+
 import OAuth from 'oauth-1.0a';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
@@ -6,9 +8,6 @@ const OAUTH_ACCESS_TOKEN_URL = 'https://trello.com/1/OAuthGetAccessToken';
 const TRELLO_PUBLIC_API_KEY = process.env.TRELLO_PUBLIC_API_KEY;
 const TRELLO_SECRET = process.env.TRELLO_SECRET;
 
-// === OSTATECZNA POPRAWKA: Ustawiamy URL na stałe ===
-const APP_BASE_URL = 'https://kaman-oferty-trello.vercel.app';
-  
 const parseCookies = (cookieHeader) => {
   const list = {};
   if (!cookieHeader) return list;
@@ -27,7 +26,7 @@ export default async function handler(req, res) {
   if (!TRELLO_PUBLIC_API_KEY || !TRELLO_SECRET) {
     return res.status(500).send("Brak kluczy Trello.");
   }
-  
+
   const { oauth_token, oauth_verifier } = req.query;
   const cookies = parseCookies(req.headers.cookie);
   const oauth_token_secret = cookies.trello_oauth_secret;
@@ -49,7 +48,7 @@ export default async function handler(req, res) {
     method: 'POST',
     data: { oauth_token, oauth_verifier }
   };
-  
+
   const params = new URLSearchParams();
   params.append('oauth_token', oauth_token);
   params.append('oauth_verifier', oauth_verifier);
@@ -80,20 +79,24 @@ export default async function handler(req, res) {
       return res.status(400).send("Niekompletne dane z Trello.");
     }
 
+    // ### ZMIENIONA CZĘŚĆ ###
+    // Zamiast postMessage, zapisujemy tokeny do localStorage i zamykamy okno.
+    // Aplikacja-matka zareaguje na zdarzenie 'storage'.
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
       <!DOCTYPE html><html><head><title>Autoryzacja Trello</title></head>
       <body>
-        <p>Autoryzacja zakończona. Możesz zamknąć to okno.</p>
+        <p>Autoryzacja zakończona pomyślnie. To okno zostanie zamknięte za chwilę.</p>
         <script>
-          if (window.opener && !window.opener.closed) {
-            window.opener.postMessage({
-              type: 'TRELLO_OAUTH_SUCCESS',
-              accessToken: '${accessToken}',
-              accessTokenSecret: '${accessTokenSecret}'
-            }, '${APP_BASE_URL}');
-          }
-          try { window.close(); } catch(e) {}
+          localStorage.setItem('trello_access_token', '${accessToken}');
+          localStorage.setItem('trello_access_token_secret', '${accessTokenSecret}');
+          
+          // Dajemy przeglądarce chwilę na zapisanie danych przed zamknięciem
+          setTimeout(() => {
+            try { window.close(); } catch(e) {
+              document.body.innerHTML = "<h1>Możesz już zamknąć to okno.</h1>";
+            }
+          }, 100);
         </script>
       </body></html>
     `);

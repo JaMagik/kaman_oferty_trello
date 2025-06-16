@@ -1,11 +1,9 @@
-// src/components/UnifiedOfferForm.jsx
+// jamagik/kaman_oferty_trello/kaman_oferty_trello-bfb2142551adeb7f98df4053f558f65743fcf124/src/components/UnifiedOfferForm.jsx
+
 import React, { useState, useEffect } from "react";
 import { generateOfferPDF } from "../utils/pdfGenerator";
 import { mitsubishiBaseTables } from "../data/tables/mitsubishiTables";
 import { atlanticBaseTables } from "../data/tables/atlanticTables";
-
-// Upewnij się, że ta stała odpowiada KAMAN_APP_ORIGIN w main.js
-const KAMAN_APP_ORIGIN = 'https://kaman-oferty-trello.vercel.app'; // Dostosuj, jeśli potrzeba
 
 const allDevicesData = { ...mitsubishiBaseTables, ...atlanticBaseTables };
 
@@ -38,28 +36,37 @@ export default function UnifiedOfferForm() {
     }
   }, [deviceType, model]);
 
-  // --- OAUTH HANDLER ---
+  // ### NOWA, ULEPSZONA OBSŁUGA AUTORYZACJI ###
+  useEffect(() => {
+    const handleStorageChange = (event) => {
+      if (event.key === 'trello_access_token' || event.key === 'trello_access_token_secret') {
+        const token = localStorage.getItem('trello_access_token');
+        const secret = localStorage.getItem('trello_access_token_secret');
+        if (token && secret) {
+          setAccessToken(token);
+          setAccessTokenSecret(secret);
+          alert("Połączono z Trello!");
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+    };
+  }, []); // Pusta tablica zależności sprawi, że listener ustawi się raz
+
   const handleTrelloAuth = () => {
     const width = 600, height = 600;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
-      const popup = window.open(
-    '/api/trelloAuth/start.js',
-         'TrelloAuth',
+    window.open(
+      '/api/trelloAuth/start.js',
+      'TrelloAuth',
       `width=${width},height=${height},left=${left},top=${top}`
     );
-    // Listener na wiadomość z popupu (jednorazowy)
-    const receiveMessage = (event) => {
-      if (event.origin !== window.location.origin) return;
-      if (event.data.type === 'TRELLO_OAUTH_SUCCESS') {
-        setAccessToken(event.data.accessToken);
-        setAccessTokenSecret(event.data.accessTokenSecret);
-        localStorage.setItem('trello_access_token', event.data.accessToken);
-        localStorage.setItem('trello_access_token_secret', event.data.accessTokenSecret);
-        alert("Połączono z Trello!");
-      }
-    };
-    window.addEventListener('message', receiveMessage, { once: true });
+    // Usunęliśmy stary listener 'message'
   };
 
   const handleGenerateAndSetPdf = async (e) => {
@@ -98,7 +105,6 @@ export default function UnifiedOfferForm() {
     const reader = new FileReader();
     reader.onloadend = async () => {
       const base64PdfDataUrl = reader.result;
-      // Wysyłamy zapytanie do endpointu z tokenami!
       try {
         const res = await fetch('/api/saveToTrello.js', {
           method: 'POST',
@@ -130,10 +136,15 @@ export default function UnifiedOfferForm() {
     reader.readAsDataURL(generatedPdfData);
   };
 
+  // ### ZMIENIONA LOGIKA WYŚWIETLANIA PRZYCISKÓW DLA JASNOŚCI ###
+  const isAuthorized = !!accessToken && !!accessTokenSecret;
+  const isReadyToSave = !!generatedPdfData && !!trelloCardId;
+
   return (
     <form className="form-container" onSubmit={handleGenerateAndSetPdf}>
       <h2>Generator Ofert KAMAN</h2>
-      <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Imię i nazwisko klienta" required />
+      {/* ... (pola input bez zmian) ... */}
+       <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Imię i nazwisko klienta" required />
       <input type="text" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Cena końcowa" required />
 
       <select value={deviceType} onChange={(e) => setDeviceType(e.target.value)}>
@@ -161,19 +172,21 @@ export default function UnifiedOfferForm() {
       <button
         type="button"
         onClick={handleTrelloAuth}
-        disabled={!!accessToken && !!accessTokenSecret}
-        style={{ background: (!!accessToken && !!accessTokenSecret) ? "#ccc" : "#026aa7" }}
+        disabled={isAuthorized}
+        style={{ background: isAuthorized ? "#4caf50" : "#026aa7", color: "white" }}
       >
-        {(!accessToken || !accessTokenSecret) ? "Połącz z Trello" : "Połączono z Trello"}
+        {isAuthorized ? "Połączono z Trello" : "Połącz z Trello"}
       </button>
 
-      {generatedPdfData && trelloCardId && <button type="button" onClick={handleSaveToTrello} disabled={isSaving || !accessToken || !accessTokenSecret}>
-        {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
-      </button>}
-
-      {(!generatedPdfData || !trelloCardId) && <button type="button" disabled>
-        Zapisz w Trello (niedostępne)
-      </button>}
+      {isReadyToSave ? (
+        <button type="button" onClick={handleSaveToTrello} disabled={isSaving || !isAuthorized}>
+          {isSaving ? "Zapisywanie..." : "Zapisz w Trello"}
+        </button>
+      ) : (
+        <button type="button" disabled title="Najpierw wygeneruj PDF, aby zapisać go w Trello">
+          Zapisz w Trello (niedostępne)
+        </button>
+      )}
     </form>
   );
 }
