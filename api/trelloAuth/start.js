@@ -27,6 +27,12 @@ export default async function handler(req, res) {
 
   const oauth_callback_url = `${APP_BASE_URL}/api/trelloAuth/callback`;
 
+  // =================================================================
+  // == KROK DEBUGOWANIA: ZAPISUJEMY URL W LOGACH SERWERA ==
+  console.log(`[DEBUG] Wygenerowany URL zwrotny (callback) to: ${oauth_callback_url}`);
+  console.log(`[DEBUG] Zmienna process.env.VERCEL_URL to: ${process.env.VERCEL_URL}`);
+  // =================================================================
+
   const request_data = {
     url: OAUTH_REQUEST_TOKEN_URL,
     method: 'POST',
@@ -52,7 +58,6 @@ export default async function handler(req, res) {
 
     const requestParams = new URLSearchParams(text);
     const oauth_token = requestParams.get('oauth_token');
-    // POPRAWKA: Pobieramy i używamy oauth_token_secret
     const oauth_token_secret = requestParams.get('oauth_token_secret');
 
     if (!oauth_token || !oauth_token_secret) {
@@ -60,10 +65,8 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Niekompletna odpowiedź z Trello.', details: text });
     }
 
-    // POPRAWKA: Zapisujemy sekret w bezpiecznym, tymczasowym cookie
-    res.setHeader('Set-Cookie', `trello_oauth_secret=${oauth_token_secret}; HttpOnly; Path=/; Secure; SameSite=Lax; Max-Age=300`); // Ważność 5 minut
+    res.setHeader('Set-Cookie', `trello_oauth_secret=${oauth_token_secret}; HttpOnly; Path=/; Secure; SameSite=Lax; Max-Age=300`);
 
-    // Przekierowujemy użytkownika do Trello w celu autoryzacji
     const redirectUrl = `${OAUTH_AUTHORIZE_URL}?oauth_token=${oauth_token}&name=KamanOferty&scope=read,write&expiration=never`;
     res.writeHead(302, { Location: redirectUrl });
     res.end();
